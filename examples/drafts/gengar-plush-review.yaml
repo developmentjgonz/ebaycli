@@ -1,0 +1,38 @@
+sku: REVIEW-GENGAR-PLUSH-001
+marketplaceId: EBAY_US
+title: Pokemon Gengar Plush Pillow Purple Character Plush Toy
+description: >
+  Pre-owned purple Gengar character plush / pillow. The visible front side shows
+  clean stitching, embroidered eyes, and a large smile graphic. No obvious tears
+  or heavy staining are visible in the provided photo, but the item should be
+  inspected again before publishing for tags, measurements, brand details, and
+  any flaws not visible here.
+  
+  Draft assumptions for review:
+  - character appears to be Gengar from Pokemon
+  - item is being listed as used / pre-owned
+  - exact manufacturer, size, and material are not yet confirmed
+  
+  Before publishing:
+  - add exact measurements
+  - confirm the brand / tag details
+  - add close-up photos of front, back, tag, and any wear
+categoryId: "2624"
+condition: USED_GOOD
+format: FIXED_PRICE
+price:
+  value: "24.99"
+  currency: USD
+availableQuantity: 1
+images: []
+aspects:
+  Character:
+    - Gengar
+  Franchise:
+    - Pokemon
+  Color:
+    - Purple
+  Type:
+    - Plush Toy
+  Size:
+    - Unknown

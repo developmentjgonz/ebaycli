@@ -1,0 +1,11 @@
+merchantLocationKey: warehouse-main
+name: Main warehouse
+location:
+  address:
+    addressLine1: 123 Market Street
+    city: Philadelphia
+    stateOrProvince: PA
+    postalCode: "19106"
+    country: US
+locationTypes:
+  - WAREHOUSE

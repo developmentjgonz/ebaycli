@@ -1,0 +1,40 @@
+paymentPolicy:
+  marketplaceId: EBAY_US
+  name: CLI Payment Policy
+  categoryTypes:
+    - name: ALL_EXCLUDING_MOTORS_VEHICLES
+      default: true
+  immediatePay: true
+  paymentMethods:
+    - paymentMethodType: PAYPAL
+fulfillmentPolicy:
+  marketplaceId: EBAY_US
+  name: CLI Fulfillment Policy
+  categoryTypes:
+    - name: ALL_EXCLUDING_MOTORS_VEHICLES
+      default: true
+  handlingTime:
+    value: 1
+    unit: DAY
+  shippingOptions:
+    - optionType: DOMESTIC
+      costType: FLAT_RATE
+      shippingServices:
+        - shippingCarrierCode: USPS
+          shippingServiceCode: USPSGround
+          shippingCost:
+            value: "9.99"
+            currency: USD
+returnPolicy:
+  marketplaceId: EBAY_US
+  name: CLI Return Policy
+  categoryTypes:
+    - name: ALL_EXCLUDING_MOTORS_VEHICLES
+      default: true
+  returnsAccepted: true
+  returnMethod: MONEY_BACK
+  returnPeriod:
+    unit: DAY
+    value: 30
+  refundMethod: MONEY_BACK
+  shippingCostPayer: BUYER

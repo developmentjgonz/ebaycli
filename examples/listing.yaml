@@ -1,0 +1,25 @@
+sku: SAMPLE-SKU-001
+marketplaceId: EBAY_US
+title: Vintage brass desk lamp
+description: >
+  Restored vintage brass desk lamp with tested wiring and minor cosmetic wear.
+categoryId: "262197"
+condition: USED_EXCELLENT
+format: FIXED_PRICE
+price:
+  value: "89.99"
+  currency: USD
+availableQuantity: 1
+policies:
+  paymentPolicyId: "<payment-policy-id>"
+  fulfillmentPolicyId: "<fulfillment-policy-id>"
+  returnPolicyId: "<return-policy-id>"
+locationKey: warehouse-main
+images:
+  - ./images/lamp-front.jpg
+  - ./images/lamp-side.jpg
+aspects:
+  Brand:
+    - Unbranded
+  Type:
+    - Desk Lamp
