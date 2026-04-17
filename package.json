@@ -2,19 +2,39 @@
   "name": "ebaycli",
   "version": "0.1.0",
   "description": "Local-first eBay seller CLI for listing management",
+  "license": "MIT",
+  "author": "Joseph Gonzalez <developmentjgonz@gmail.com>",
   "type": "module",
   "bin": {
     "ebay": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "llms.txt"
+  ],
   "scripts": {
     "clean": "rm -rf dist",
     "build": "npm run clean && tsc -p tsconfig.json",
     "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm test && npm run build",
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "keywords": [
+    "ebay",
+    "cli",
+    "seller",
+    "listings",
+    "agent",
+    "automation"
+  ],
   "engines": {
     "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "commander": "^14.0.1",

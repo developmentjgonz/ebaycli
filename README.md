@@ -24,6 +24,14 @@ node dist/index.js setup doctor --json
 node dist/index.js listings list --json
 ```
 
+For a published install:
+
+```bash
+npm install -g ebaycli
+ebay guide --json
+ebay auth login --environment production
+```
+
 Once connected, the normal workflow is:
 
 ```bash
