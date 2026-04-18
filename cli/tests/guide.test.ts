@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { getGuide } from "../src/guide.js";
+import { buildCliLlmsText } from "../src/llms.js";
 
 describe("guide", () => {
   it("describes the self-managed auth model in the overview", () => {
@@ -31,5 +32,12 @@ describe("guide", () => {
     expect(guide.optionalFields).toContain("conditionDescriptors");
     expect(guide.conditionNotes[0]).toContain("conditionDescriptors");
     expect(guide.example.sku).toBe("GENGAR-38-PLUSH-001");
+  });
+
+  it("emits CLI llms metadata with runtime discovery guidance", () => {
+    const llms = buildCliLlmsText();
+    expect(llms).toContain("ebay guide --json");
+    expect(llms).toContain("ebay llms");
+    expect(llms).toContain("self-managed local eBay CLI");
   });
 });

@@ -27,6 +27,7 @@ import {
 } from "./backend-config.js";
 import { AppError } from "./errors.js";
 import { getGuide } from "./guide.js";
+import { buildCliLlmsText } from "./llms.js";
 import {
   renderConnectionStatus,
   renderDoctorReport,
@@ -81,6 +82,15 @@ export function createCli(): Command {
     .action((topic, _options, command: Command) => {
       const global = getGlobalOptions(command);
       renderResult(getGuide(topic), Boolean(global.json));
+    });
+
+  program
+    .command("llms")
+    .description("Return the CLI's static agent-discovery metadata")
+    .action((_, command: Command) => {
+      const global = getGlobalOptions(command);
+      const content = buildCliLlmsText();
+      renderResult(global.json ? { format: "llms.txt", content } : content, Boolean(global.json));
     });
 
   const config = program.command("config").description("Configure this CLI profile and optional companion backend/site URLs");

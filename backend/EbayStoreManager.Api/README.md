@@ -37,9 +37,62 @@ Readiness check:
 curl http://localhost:5141/ready
 ```
 
-## Required configuration
+## Configuration model
 
-Set eBay credentials before using OAuth:
+Production-minded defaults:
+
+- secrets are not checked into `appsettings.json`
+- local development should use `.NET user-secrets` or environment variables
+- production should use App Service settings, Key Vault, or equivalent server-side secret storage
+- the checked-in `Legal` section contains generic placeholders and should be overridden for any real deployment
+
+What is actually required:
+
+- `ConnectionStrings:SqlServer` or `ConnectionStrings:Sqlite`
+  - one database connection is required
+  - local dev can use the checked-in SQLite default
+  - production should typically use SQL Server
+- `Ebay:Production:ClientId`, `Ebay:Production:ClientSecret`, `Ebay:Production:RuName`
+  - required only if you want production OAuth/calls
+- `Ebay:Sandbox:ClientId`, `Ebay:Sandbox:ClientSecret`, `Ebay:Sandbox:RuName`
+  - required only if you want sandbox OAuth/calls
+- `Ebay:Notifications:VerificationToken`
+  - required only if you enable the marketplace account deletion notification challenge flow
+- `Legal:CompanyName`, `Legal:ContactEmail`, `Legal:EffectiveDate`, `Legal:WebsiteUrl`
+  - not required for the app to boot
+  - required if you want the public privacy/auth pages to be production-credible
+- `Operations:*`
+  - optional tuning knobs
+  - safe defaults already exist in `appsettings.json`
+
+Settings that are intentionally not in the config surface anymore:
+
+- no `PublicBaseUrl`
+- no `CallbackPath`
+
+Those values were unused by the runtime and were removed to keep the production config honest.
+
+## Local secrets
+
+Use `dotnet user-secrets` for local eBay credentials:
+
+```bash
+cd /Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api
+
+dotnet user-secrets set "Ebay:Sandbox:ClientId" "..."
+dotnet user-secrets set "Ebay:Sandbox:ClientSecret" "..."
+dotnet user-secrets set "Ebay:Sandbox:RuName" "..."
+
+dotnet user-secrets set "Ebay:Production:ClientId" "..."
+dotnet user-secrets set "Ebay:Production:ClientSecret" "..."
+dotnet user-secrets set "Ebay:Production:RuName" "..."
+
+dotnet user-secrets set "Legal:CompanyName" "Your Company"
+dotnet user-secrets set "Legal:ContactEmail" "privacy@your-domain.com"
+dotnet user-secrets set "Legal:WebsiteUrl" "https://your-domain.com"
+```
+
+Or use environment variables when preferred:
 
 ```bash
 export Ebay__Sandbox__ClientId="..."
@@ -50,13 +103,33 @@ export Ebay__Production__ClientSecret="..."
 export Ebay__Production__RuName="..."
 ```
 
-For Azure SQL:
+For SQL Server:
 
 ```bash
 export ConnectionStrings__SqlServer="Server=tcp:...;Database=...;User ID=...;Password=...;Encrypt=True;"
 ```
 
 If `ConnectionStrings__SqlServer` is not set, the app falls back to local SQLite from [appsettings.json](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api/appsettings.json).
+
+## Local smoke test
+
+Without any eBay secrets configured, the app should still boot and serve its public surfaces:
+
+```bash
+cd /Users/admin/Projects/ebaycli/backend
+dotnet run --project EbayStoreManager.Api
+```
+
+Then verify:
+
+```bash
+curl http://localhost:5141/health
+curl http://localhost:5141/ready
+curl http://localhost:5141/privacy
+curl http://localhost:5141/llms.txt
+```
+
+With sandbox or production credentials configured, you can then test the OAuth bootstrap endpoint and full flow.
 
 ## Important eBay setup
 

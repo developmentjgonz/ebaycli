@@ -6,7 +6,7 @@ describe("CLI shape", () => {
   it("registers the public top-level commands for the local-session product", () => {
     const cli = createCli();
     const commandNames = cli.commands.map((command) => command.name());
-    expect(commandNames).toEqual(["guide", "config", "auth", "setup", "listings"]);
+    expect(commandNames).toEqual(["guide", "llms", "config", "auth", "setup", "listings"]);
   });
 
   it("exposes the dual-mode auth config surface", () => {

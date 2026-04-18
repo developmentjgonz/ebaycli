@@ -4,10 +4,6 @@ public sealed class EbayIntegrationOptions
 {
     public const string SectionName = "Ebay";
 
-    public string PublicBaseUrl { get; set; } = "https://localhost:7217";
-
-    public string CallbackPath { get; set; } = "/oauth/ebay/callback";
-
     public string[] Scopes { get; set; } =
     [
         "https://api.ebay.com/oauth/api_scope",

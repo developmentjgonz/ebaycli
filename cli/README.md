@@ -64,6 +64,13 @@ node dist/index.js guide agent-notes --json
 
 Use that output before generating listing drafts or choosing write operations.
 
+For static runtime metadata, the CLI also exposes:
+
+```bash
+node dist/index.js llms
+node dist/index.js llms --json
+```
+
 The repository also ships a root [llms.txt](/Users/admin/Projects/ebaycli/llms.txt) file for monorepo discovery, and this package ships its own [llms.txt](/Users/admin/Projects/ebaycli/cli/llms.txt) for CLI/package discovery.
 
 ## Design docs

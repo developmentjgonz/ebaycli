@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseAppHost>false</UseAppHost>
+    <UserSecretsId>ebaycli-backend-reference-85a0f91d</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

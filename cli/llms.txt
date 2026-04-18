@@ -61,6 +61,7 @@ Agents should prefer the built-in guide surface over repository inference:
 - `node dist/index.js guide workflows --json`
 - `node dist/index.js guide listing-spec --json`
 - `node dist/index.js guide agent-notes --json`
+- `node dist/index.js llms`
 
 Use those commands before drafting listing files or deciding whether a listing operation will route through Trading or Inventory APIs.
 
