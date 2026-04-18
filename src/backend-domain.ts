@@ -9,7 +9,6 @@ import { promisify } from "node:util";
 
 import YAML from "yaml";
 
-import { BackendApiClient } from "./backend-client.js";
 import { getBackendProfile, requireLocalEbaySession, requireSelfManagedApp, upsertBackendProfile } from "./backend-config.js";
 import { DEFAULT_CALLBACK_PORT } from "./constants.js";
 import { DefaultScopes, EbayApiClient, buildAuthorizeUrl, resolveEbayEnvironment } from "./ebay-api.js";
@@ -82,63 +81,42 @@ export async function beginLocalEbayAuthorization(
   profile: BackendProfile,
   request: { environment: string; callbackUrl: string; marketplaceId?: string }
 ): Promise<LocalEbayAuthStartResponse> {
-  if (profile.authMode === "self-managed") {
-    const app = requireSelfManagedApp(profile);
-    if (request.environment !== app.environment) {
-      throw new AppError(
-        "CONFIG_ERROR",
-        `This profile is configured for self-managed ${app.environment} auth. Re-run \`ebay auth login --environment ${app.environment}\` or update \`ebay config auth --environment ...\`.`
-      );
-    }
-    const state = randomBytes(24).toString("hex");
-    return {
-      authorizeUrl: buildAuthorizeUrl(toAuthEnvironment(app, app.environment), state, DefaultScopes),
-      state,
-      environment: app.environment,
-      marketplaceId: request.marketplaceId ?? "EBAY_US",
-      expiresAtUtc: new Date(Date.now() + 10 * 60 * 1000).toISOString()
-    };
+  const app = requireSelfManagedApp(profile);
+  if (request.environment !== app.environment) {
+    throw new AppError(
+      "CONFIG_ERROR",
+      `This profile is configured for ${app.environment} auth. Re-run \`ebay auth login --environment ${app.environment}\` or update \`ebay config auth --environment ...\`.`
+    );
   }
 
-  return await new BackendApiClient(profile).post<LocalEbayAuthStartResponse>("/api/local/ebay/authorize/start", request);
+  const state = randomBytes(24).toString("hex");
+  return {
+    authorizeUrl: buildAuthorizeUrl(toAuthEnvironment(app, app.environment), state, DefaultScopes),
+    state,
+    environment: app.environment,
+    marketplaceId: request.marketplaceId ?? "EBAY_US",
+    expiresAtUtc: new Date(Date.now() + 10 * 60 * 1000).toISOString()
+  };
 }
 
 export async function exchangeLocalEbayAuthorization(
   profile: BackendProfile,
   request: { state: string; code: string }
 ): Promise<LocalEbaySession> {
-  if (profile.authMode === "self-managed") {
-    const app = requireSelfManagedApp(profile);
-    return await exchangeSelfManagedAuthorization(app, request.code);
-  }
-
-  return await new BackendApiClient(profile).post<LocalEbaySession>("/api/local/ebay/authorize/exchange", request);
+  const app = requireSelfManagedApp(profile);
+  return await exchangeSelfManagedAuthorization(app, request.code);
 }
 
 export async function refreshLocalEbaySession(profile: BackendProfile, session: LocalEbaySession): Promise<LocalEbaySession> {
-  if (profile.authMode === "self-managed") {
-    const app = requireSelfManagedApp(profile);
-    return await refreshSelfManagedSession(app, session);
-  }
-
-  return await new BackendApiClient(profile).post<LocalEbaySession>("/api/local/ebay/refresh", {
-    environment: session.environment,
-    refreshToken: session.refreshToken,
-    marketplaceId: session.marketplaceId,
-    defaultPaymentPolicyId: session.defaultPaymentPolicyId,
-    defaultReturnPolicyId: session.defaultReturnPolicyId,
-    defaultFulfillmentPolicyId: session.defaultFulfillmentPolicyId,
-    defaultLocationKey: session.defaultLocationKey
-  });
+  const app = requireSelfManagedApp(profile);
+  return await refreshSelfManagedSession(app, session);
 }
 
 export async function authenticateWithEbayLocally(
   profile: BackendProfile,
   options: { environment: string; marketplaceId?: string; shouldOpen?: boolean; timeoutMs?: number }
 ): Promise<{ session: LocalEbaySession; authorize: LocalEbayAuthStartResponse; opened: boolean; callbackUrl: string }> {
-  const callback = profile.authMode === "shared"
-    ? await startBrowserCallbackServer(DEFAULT_CALLBACK_PORT)
-    : await startSelfManagedAuthorizationListener(profile);
+  const callback = await startSelfManagedAuthorizationListener(profile);
   try {
     const authorize = await beginLocalEbayAuthorization(profile, {
       environment: options.environment,

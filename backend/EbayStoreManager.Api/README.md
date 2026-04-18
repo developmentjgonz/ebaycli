@@ -1,16 +1,14 @@
 # EbayStoreManager.Api
 
-`EbayStoreManager.Api` is the shared-mode auth broker and public service surface for `ebaycli`.
+`EbayStoreManager.Api` is an optional reference backend for `ebaycli`.
 
 Primary responsibilities:
 
-- hold the shared eBay app credentials server-side
-- start shared-mode OAuth bootstrap
-- exchange and refresh tokens for shared mode
 - host public privacy and auth landing pages
+- demonstrate optional server-side OAuth callback and token handling
 - expose the marketplace account deletion webhook
 
-The CLI owns the local eBay session and is the primary product surface. Self-managed mode bypasses the broker for token exchange and talks directly to eBay from the CLI.
+The public CLI path is self-managed and stores the eBay session locally. This backend is useful for private deployments, self-hosting, and as an implementation reference for the eBay-required server-side surfaces.
 
 ## Local run
 

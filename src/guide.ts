@@ -64,31 +64,19 @@ function normalizeTopic(topic?: string): GuideTopic {
 
 function buildOverviewGuide() {
   return {
-    model: "agent-first-local-cli",
+    model: "self-managed-local-cli",
     summary:
-      "The CLI stores the eBay session locally, keeps listing/setup logic local, and supports two auth modes: shared mode via a tiny backend auth broker and self-managed mode for users who bring their own eBay app credentials.",
-    authModes: {
-      shared: {
-        default: true,
-        purpose: "Use the hosted backend as an auth broker for the shared eBay app. Normal end-user path.",
-        setup: [
-          "Run `ebay auth login --environment production`.",
-          "The CLI uses the configured backend only for OAuth bootstrap and token refresh."
-        ]
-      },
-      selfManaged: {
-        default: false,
-        purpose: "Advanced path. The user provides their own eBay Client ID, Client Secret, and RuName.",
-        setup: [
-          "Run `ebay config auth --mode self-managed --client-id ... --client-secret ... --runame ...`.",
-          "Optional URLs default to the configured backend: `/privacy`, `/auth/success`, `/auth/declined`."
-        ]
-      }
+      "The CLI stores the eBay session locally, keeps listing/setup logic local, and uses only self-managed eBay app credentials. The optional .NET backend in the repo is a reference implementation for privacy/auth landing pages, token exchange hosting, and eBay-required server-side surfaces.",
+    authModel: {
+      mode: "self-managed",
+      setup: [
+        "Run `ebay config auth --client-id ... --client-secret ... --runame ...`.",
+        "Optional URLs default to the configured companion backend/site: `/privacy`, `/auth/success`, `/auth/declined`."
+      ]
     },
     topics: ["capabilities", "workflows", "listing-spec", "agent-notes"],
     coreCommands: [
-      "ebay config auth --mode shared",
-      "ebay config auth --mode self-managed --client-id ... --client-secret ... --runame ...",
+      "ebay config auth --client-id ... --client-secret ... --runame ...",
       "ebay auth login --environment production",
       "ebay auth status --json",
       "ebay setup doctor --json",
@@ -106,21 +94,17 @@ function buildCapabilitiesGuide() {
     config: [
       {
         command: "ebay config set --backend-url <url>",
-        purpose: "Override the hosted backend URL for shared-mode auth brokering and the default public auth/privacy pages."
+        purpose: "Set the optional companion backend/site URL used to derive default privacy and auth landing page URLs."
       },
       {
-        command: "ebay config auth --mode shared",
-        purpose: "Use the hosted backend as the shared-mode auth broker."
-      },
-      {
-        command: "ebay config auth --mode self-managed --client-id ... --client-secret ... --runame ...",
-        purpose: "Enable self-managed auth and store the user-provided eBay app credentials in the local CLI profile."
+        command: "ebay config auth --client-id ... --client-secret ... --runame ...",
+        purpose: "Store the user-provided eBay app credentials in the local CLI profile."
       }
     ],
     auth: [
       {
         command: "ebay auth login",
-        purpose: "Run eBay OAuth locally and store the refresh/access token in the selected CLI profile. Shared mode uses the backend broker; self-managed mode exchanges directly with eBay."
+        purpose: "Run eBay OAuth locally and store the refresh/access token in the selected CLI profile."
       },
       {
         command: "ebay auth status",
@@ -174,11 +158,11 @@ function buildCapabilitiesGuide() {
       },
       {
         command: "ebay listings update <reference> --file <patch.yaml>",
-        purpose: "Plan an update. The backend dispatches Trading or Inventory automatically based on listing type."
+        purpose: "Plan an update. The CLI dispatches Trading or Inventory automatically based on listing type."
       },
       {
         command: "ebay listings end <reference>",
-        purpose: "Plan an end/withdraw. The backend dispatches Trading or Inventory automatically based on listing type."
+        purpose: "Plan an end/withdraw. The CLI dispatches Trading or Inventory automatically based on listing type."
       }
     ]
   };
@@ -188,8 +172,7 @@ function buildWorkflowGuide() {
   return {
     connect: {
       steps: [
-        "If you are a normal user, keep shared mode and run `ebay auth login --environment production` or `--environment sandbox`.",
-        "If you are bringing your own eBay app, run `ebay config auth --mode self-managed --client-id ... --client-secret ... --runame ...` first.",
+        "Run `ebay config auth --client-id ... --client-secret ... --runame ...` first.",
         "Finish the eBay consent flow in the browser.",
         "Run `ebay auth status --json` to verify the local session."
       ]
@@ -228,7 +211,7 @@ function buildWorkflowGuide() {
         "Export a baseline with `ebay listings pull <reference> --out existing.yaml`.",
         "Create a patch YAML containing only the fields to change.",
         "Run `ebay listings update <reference> --file patch.yaml` to inspect the plan.",
-        "Run `--apply` only after confirming the backend chose the expected Trading or Inventory path."
+        "Run `--apply` only after confirming the CLI chose the expected Trading or Inventory path."
       ]
     }
   };
@@ -283,7 +266,7 @@ function buildAgentNotesGuide() {
     safetyChecks: [
       "Run `ebay setup doctor --json` before attempting create/apply on a new account.",
       "Do not assume Business Policies are available just because OAuth works.",
-      "Use plan output to confirm whether the backend intends to use Trading or Inventory before apply."
+      "Use plan output to confirm whether the CLI intends to use Trading or Inventory before apply."
     ]
   };
 }

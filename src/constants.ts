@@ -2,8 +2,6 @@ export const APP_NAME = "ebaycli";
 export const DEFAULT_PROFILE = "default";
 export const DEFAULT_MARKETPLACE_ID = "EBAY_US";
 export const DEFAULT_CALLBACK_PORT = 8765;
-export const DEFAULT_BACKEND_BASE_URL =
-  process.env.EBAYCLI_BACKEND_URL ?? "https://ebaystore-validation-api-174140.azurewebsites.net";
 
 export const EBAY_ENVIRONMENTS = {
   production: {

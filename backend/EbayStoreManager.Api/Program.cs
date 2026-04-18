@@ -456,7 +456,7 @@ static string BuildPrivacyPolicy(LegalOptions options)
 <body>
   <h1>{{WebUtility.HtmlEncode(options.CompanyName)}} Privacy Policy</h1>
   <p><strong>Effective date:</strong> {{WebUtility.HtmlEncode(options.EffectiveDate)}}</p>
-  <p>This application connects to eBay on behalf of a user who explicitly authorizes it through eBay OAuth. It is used to inspect seller readiness, read listing data, and execute listing operations requested by the local CLI user.</p>
+  <p>This application is an optional backend companion for a self-managed eBay CLI. It may host privacy/auth landing pages, support optional token handling, and expose server-side endpoints required by eBay for users who self-host it.</p>
 
   <h2>Information processed</h2>
   <p>When you connect an eBay account, the service may process eBay account identifiers, OAuth token material, listing metadata, seller policy information, and temporary authorization-state records needed to complete login or execute a requested operation.</p>
@@ -465,7 +465,7 @@ static string BuildPrivacyPolicy(LegalOptions options)
   <p>Data is used only to complete eBay authorization, refresh access when needed, execute seller-requested eBay API calls, support diagnostics, and maintain service reliability and security.</p>
 
   <h2>How data is stored</h2>
-  <p>The CLI stores the eBay session locally on the user's machine. The backend stores shared eBay application credentials server-side and retains only temporary authorization-state records plus operational logs needed to exchange or refresh tokens and serve requests.</p>
+  <p>The CLI stores the eBay session locally on the user's machine. If this backend is used, it may process temporary authorization-state records, optional server-side token material, and operational logs needed to complete the hosted flow.</p>
 
   <h2>Data retention</h2>
   <p>Temporary authorization-state records are cleaned up automatically after they expire. Operational logs and configuration are retained only as long as needed for support, security, and service operation.</p>
@@ -530,17 +530,16 @@ static string BuildLlmsText()
     return """
 # ebaycli
 
-ebaycli is an agent-first local eBay CLI with two auth modes:
+ebaycli is a self-managed local eBay CLI.
 
-- shared mode: the backend holds the shared eBay app credentials and acts as a small auth broker
-- self-managed mode: the user provides their own eBay app credentials and the CLI talks directly to eBay for token exchange
-
-In both modes the CLI stores the eBay OAuth session locally and owns listing/setup workflow logic.
+- every user provides their own eBay app credentials
+- the CLI stores the eBay OAuth session locally
+- the CLI owns listing/setup workflow logic
+- this backend is an optional reference implementation for privacy/auth landing pages and other server-side eBay surfaces
 
 ## Project status
 
-- Shared mode is the default
-- Self-managed mode is the advanced escape hatch
+- Self-managed auth is the only public CLI mode
 - No backend user-account or store-owner model in the active product path
 - Supports both eBay listing models:
   - Trading/classic listings for active and sold reads, legacy listing detail, and legacy update/end flows
@@ -561,10 +560,8 @@ In both modes the CLI stores the eBay OAuth session locally and owns listing/set
 
 - node dist/index.js guide --json
   - Return machine-readable project guidance for agents
-- node dist/index.js config auth --mode shared
-  - Use the hosted backend as the shared-mode auth broker
-- node dist/index.js config auth --mode self-managed --client-id ... --client-secret ... --runame ...
-  - Configure direct eBay OAuth for a user-managed eBay app
+- node dist/index.js config auth --client-id ... --client-secret ... --runame ...
+  - Configure the local CLI profile with the user's own eBay app credentials
 - node dist/index.js auth login --environment production
   - Start local eBay OAuth and store the resulting session in the selected CLI profile
 - node dist/index.js auth status --json

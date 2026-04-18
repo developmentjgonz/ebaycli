@@ -25,7 +25,6 @@ import {
   resolveBackendProfile,
   upsertBackendProfile
 } from "./backend-config.js";
-import { DEFAULT_BACKEND_BASE_URL } from "./constants.js";
 import { AppError } from "./errors.js";
 import { getGuide } from "./guide.js";
 import {
@@ -71,7 +70,7 @@ export function createCli(): Command {
   const program = new Command();
   program
     .name("ebay")
-    .description("CLI for connecting a local eBay session and managing listings through the backend")
+    .description("Self-managed local eBay CLI for connecting your own eBay app and managing listings")
     .option("-p, --profile <name>", "local CLI profile name", "default")
     .option("--json", "emit machine-readable JSON", false);
 
@@ -84,10 +83,10 @@ export function createCli(): Command {
       renderResult(getGuide(topic), Boolean(global.json));
     });
 
-  const config = program.command("config").description("Configure the backend used by this CLI profile");
+  const config = program.command("config").description("Configure this CLI profile and optional companion backend/site URLs");
   config
     .command("set")
-    .description("Set the backend URL for this CLI profile")
+    .description("Set the optional companion backend/site URL used for default privacy and auth landing pages")
     .option("--backend-url <url>")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
@@ -100,11 +99,10 @@ export function createCli(): Command {
 
   config
     .command("auth")
-    .description("Configure auth mode and self-managed eBay app credentials for this profile")
-    .requiredOption("--mode <mode>", "shared or self-managed")
-    .option("--client-id <clientId>")
-    .option("--client-secret <clientSecret>")
-    .option("--runame <runame>")
+    .description("Configure self-managed eBay app credentials for this profile")
+    .requiredOption("--client-id <clientId>")
+    .requiredOption("--client-secret <clientSecret>")
+    .requiredOption("--runame <runame>")
     .option("--environment <environment>", "production or sandbox", "production")
     .option("--privacy-policy-url <url>")
     .option("--accepted-url <url>")
@@ -112,33 +110,25 @@ export function createCli(): Command {
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
       const existingProfile = resolveBackendProfile(global.profile);
-      const nextMode = options.mode === "self-managed" ? "self-managed" : "shared";
-      const authSiteBaseUrl = (existingProfile.backendBaseUrl ?? DEFAULT_BACKEND_BASE_URL).replace(/\/$/, "");
+      const authSiteBaseUrl = existingProfile.backendBaseUrl?.replace(/\/$/, "");
       const profile = upsertBackendProfile({
         name: global.profile,
-        authMode: nextMode,
-        ...(nextMode === "self-managed"
-          ? {
-              selfManagedApp: {
-                environment: options.environment,
-                clientId: options.clientId,
-                clientSecret: options.clientSecret,
-                runame: options.runame,
-                privacyPolicyUrl: options.privacyPolicyUrl ?? `${authSiteBaseUrl}/privacy`,
-                acceptedUrl: options.acceptedUrl ?? `${authSiteBaseUrl}/auth/success`,
-                declinedUrl: options.declinedUrl ?? `${authSiteBaseUrl}/auth/declined`
-              }
-            }
-          : {
-              selfManagedApp: undefined
-            })
+        selfManagedApp: {
+          environment: options.environment,
+          clientId: options.clientId,
+          clientSecret: options.clientSecret,
+          runame: options.runame,
+          ...(options.privacyPolicyUrl ? { privacyPolicyUrl: options.privacyPolicyUrl } : authSiteBaseUrl ? { privacyPolicyUrl: `${authSiteBaseUrl}/privacy` } : {}),
+          ...(options.acceptedUrl ? { acceptedUrl: options.acceptedUrl } : authSiteBaseUrl ? { acceptedUrl: `${authSiteBaseUrl}/auth/success` } : {}),
+          ...(options.declinedUrl ? { declinedUrl: options.declinedUrl } : authSiteBaseUrl ? { declinedUrl: `${authSiteBaseUrl}/auth/declined` } : {})
+        }
       });
       renderResult(redactProfile(profile), Boolean(global.json));
     });
 
   config
     .command("status")
-    .description("Show backend configuration for this CLI profile")
+    .description("Show profile configuration for this CLI profile")
     .action(async (_, command: Command) => {
       const global = getGlobalOptions(command);
       renderResult(redactProfile(resolveBackendProfile(global.profile)), Boolean(global.json));
@@ -235,7 +225,7 @@ export function createCli(): Command {
     .option("--return-policy-id <id>")
     .option("--fulfillment-policy-id <id>")
     .option("--create-from <file>", "optional JSON/YAML payload for policy creation")
-    .description("Sync business policy defaults through the backend")
+    .description("Sync business policy defaults and persist local defaults")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
       const profile = requireConfiguredBackendProfile(global.profile);
@@ -309,7 +299,7 @@ export function createCli(): Command {
     .command("create")
     .requiredOption("--file <path>", "listing spec file")
     .option("--apply", "execute the create call instead of printing the plan", false)
-    .description("Plan or create a listing through the backend")
+    .description("Plan or create a listing")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
       const profile = requireConfiguredBackendProfile(global.profile);

@@ -1,17 +1,16 @@
 # ebaycli
 
-`ebaycli` is an agent-first local eBay CLI with two auth modes:
+`ebaycli` is a self-managed local eBay CLI.
 
-- `shared`: the hosted backend acts as a small auth broker for the shared eBay app
-- `self-managed`: the user provides their own eBay app credentials and the CLI exchanges tokens directly with eBay
-
-In both modes the CLI stores the eBay OAuth session locally and owns listing/setup workflow logic.
+- every user provides their own eBay app credentials
+- the CLI exchanges and refreshes user tokens directly with eBay
+- the CLI stores the eBay OAuth session locally
+- the optional `.NET` backend in this repo is a reference implementation for privacy/auth landing pages and other server-side eBay surfaces
 
 ## Project status
 
 - Local eBay session stored in the CLI profile
-- Shared mode is the default
-- Self-managed mode is an advanced escape hatch
+- Self-managed auth is the only public CLI mode
 - No backend user-account or store-owner model in the active product path
 - Supports both eBay listing models:
   - Trading/classic listings for active and sold reads, legacy listing detail, and legacy update/end flows
@@ -29,10 +28,8 @@ In both modes the CLI stores the eBay OAuth session locally and owns listing/set
 
 - `node dist/index.js guide --json`
   - Return machine-readable project guidance for agents
-- `node dist/index.js config auth --mode shared`
-  - Use the hosted backend as the shared-mode auth broker
-- `node dist/index.js config auth --mode self-managed --client-id ... --client-secret ... --runame ...`
-  - Configure direct eBay OAuth for a user-managed eBay app
+- `node dist/index.js config auth --client-id ... --client-secret ... --runame ...`
+  - Configure the local CLI profile with the user's own eBay app credentials
 - `node dist/index.js auth login --environment production`
   - Start local eBay OAuth and store the resulting session in the selected CLI profile
 - `node dist/index.js auth status --json`
@@ -78,7 +75,7 @@ Use those commands before drafting listing files or deciding whether a listing o
 - Agent guide surface: `/src/guide.ts`
 - CLI/backend runtime logic: `/src/backend-domain.ts`
 - Local profile persistence: `/src/backend-config.ts`
-- Backend routes: `/backend/EbayStoreManager.Api/Program.cs`
+- Optional reference backend routes: `/backend/EbayStoreManager.Api/Program.cs`
 - Local direct eBay client: `/src/ebay-api.ts`
 - Local listing/setup engine: `/src/ebay-engine.ts`
 

@@ -3,18 +3,18 @@ import { describe, expect, it } from "vitest";
 import { getGuide } from "../src/guide.js";
 
 describe("guide", () => {
-  it("describes shared and self-managed auth modes in the overview", () => {
+  it("describes the self-managed auth model in the overview", () => {
     const guide = getGuide("overview") as {
       model: string;
-      authModes: {
-        shared: { default: boolean };
-        selfManaged: { default: boolean };
+      authModel: {
+        mode: string;
+        setup: string[];
       };
     };
 
-    expect(guide.model).toBe("agent-first-local-cli");
-    expect(guide.authModes.shared.default).toBe(true);
-    expect(guide.authModes.selfManaged.default).toBe(false);
+    expect(guide.model).toBe("self-managed-local-cli");
+    expect(guide.authModel.mode).toBe("self-managed");
+    expect(guide.authModel.setup[0]).toContain("ebay config auth --client-id");
   });
 
   it("returns machine-readable listing spec guidance", () => {

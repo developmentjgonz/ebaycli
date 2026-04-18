@@ -106,7 +106,6 @@ describe("local eBay session flows", () => {
   it("builds self-managed authorization locally with the configured eBay app", async () => {
     const profile = upsertBackendProfile({
       name: "self-managed",
-      authMode: "self-managed",
       selfManagedApp: {
         environment: "sandbox",
         clientId: "sandbox-client-id",
@@ -133,7 +132,6 @@ describe("local eBay session flows", () => {
   it("rejects self-managed authorization when the requested environment does not match the configured app", async () => {
     const profile = upsertBackendProfile({
       name: "self-managed-mismatch",
-      authMode: "self-managed",
       selfManagedApp: {
         environment: "production",
         clientId: "prod-client-id",
@@ -151,7 +149,7 @@ describe("local eBay session flows", () => {
         callbackUrl: "https://example.test/auth/success",
         marketplaceId: "EBAY_US"
       })
-    ).rejects.toThrow(/configured for self-managed production auth/i);
+    ).rejects.toThrow(/configured for production auth/i);
   });
 
   it("refreshes expired local sessions and persists the new tokens before calling status", async () => {
@@ -168,23 +166,32 @@ describe("local eBay session flows", () => {
 
     const profile = upsertBackendProfile({
       name: "default",
-      backendBaseUrl: "https://example.test",
+      selfManagedApp: {
+        environment: "sandbox",
+        clientId: "sandbox-client-id",
+        clientSecret: "sandbox-client-secret",
+        runame: "sandbox-runame",
+        privacyPolicyUrl: "https://example.test/privacy",
+        acceptedUrl: "https://example.test/auth/success",
+        declinedUrl: "https://example.test/auth/declined"
+      },
       ebaySession: expiredSession,
       outputFormat: "json"
     });
 
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.endsWith("/api/local/ebay/refresh")) {
-        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-        expect(body.refreshToken).toBe("refresh-token-1");
+      if (url.endsWith("/identity/v1/oauth2/token")) {
+        expect(String(init?.body)).toContain("refresh_token=refresh-token-1");
         return new Response(
           JSON.stringify({
-            environment: "sandbox",
-            marketplaceId: "EBAY_US",
             accessToken: "fresh-access-token",
+            access_token: "fresh-access-token",
             refreshToken: "refresh-token-2",
+            refresh_token: "refresh-token-2",
             accessTokenExpiresAtUtc: "2099-01-01T00:00:00Z",
-            ebayUsername: "testuser_refresh"
+            expires_in: 7200,
+            refresh_token_expires_in: 86400,
+            token_type: "User Access Token"
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         );
@@ -219,7 +226,7 @@ describe("local eBay session flows", () => {
       const status = await getLocalConnectionStatus(profile);
       expect(status.connected).toBe(true);
       expect(status.ebayUsername).toBe("testuser_refresh");
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(5);
 
       const persisted = loadBackendProfiles()[0];
       expect(persisted?.ebaySession?.accessToken).toBe("fresh-access-token");
@@ -235,7 +242,15 @@ describe("local eBay session flows", () => {
 
     const profile = upsertBackendProfile({
       name: "default",
-      backendBaseUrl: "https://example.test",
+      selfManagedApp: {
+        environment: "sandbox",
+        clientId: "sandbox-client-id",
+        clientSecret: "sandbox-client-secret",
+        runame: "sandbox-runame",
+        privacyPolicyUrl: "https://example.test/privacy",
+        acceptedUrl: "https://example.test/auth/success",
+        declinedUrl: "https://example.test/auth/declined"
+      },
       ebaySession: {
         environment: "sandbox",
         marketplaceId: "EBAY_US",
@@ -308,7 +323,15 @@ describe("local eBay session flows", () => {
 
     const profile = upsertBackendProfile({
       name: "default",
-      backendBaseUrl: "https://example.test",
+      selfManagedApp: {
+        environment: "production",
+        clientId: "prod-client-id",
+        clientSecret: "prod-client-secret",
+        runame: "prod-runame",
+        privacyPolicyUrl: "https://example.test/privacy",
+        acceptedUrl: "https://example.test/auth/success",
+        declinedUrl: "https://example.test/auth/declined"
+      },
       ebaySession: {
         environment: "production",
         marketplaceId: "EBAY_US",

@@ -58,7 +58,6 @@ export function upsertBackendProfile(input: Partial<BackendProfile> & Pick<Backe
   const merged = backendProfileSchema.parse({
     name: input.name,
     backendBaseUrl: input.backendBaseUrl ?? existing?.backendBaseUrl,
-    authMode: input.authMode ?? existing?.authMode,
     selfManagedApp: input.selfManagedApp ?? existing?.selfManagedApp,
     ebaySession: input.ebaySession ?? existing?.ebaySession,
     outputFormat: input.outputFormat ?? existing?.outputFormat
@@ -78,8 +77,11 @@ export function resolveBackendProfile(name = DEFAULT_PROFILE): BackendProfile {
 
 export function requireConfiguredBackendProfile(name = DEFAULT_PROFILE): BackendProfile {
   const profile = resolveBackendProfile(name);
-  if (profile.authMode === "shared" && !profile.backendBaseUrl) {
-    throw new AppError("CONFIG_ERROR", "Backend URL is not configured. Run `ebay config set --backend-url <url>`.");
+  if (!profile.selfManagedApp) {
+    throw new AppError(
+      "CONFIG_ERROR",
+      "eBay app credentials are not configured. Run `ebay config auth --client-id ... --client-secret ... --runame ...`."
+    );
   }
 
   return profile;
@@ -91,6 +93,7 @@ export function clearLocalEbaySession(name = DEFAULT_PROFILE): BackendProfile {
   const merged = backendProfileSchema.parse({
     name,
     backendBaseUrl: existing?.backendBaseUrl,
+    selfManagedApp: existing?.selfManagedApp,
     outputFormat: existing?.outputFormat
   });
 
@@ -111,10 +114,10 @@ export function requireLocalEbaySession(profile: BackendProfile): LocalEbaySessi
 }
 
 export function requireSelfManagedApp(profile: BackendProfile): SelfManagedApp {
-  if (profile.authMode !== "self-managed" || !profile.selfManagedApp) {
+  if (!profile.selfManagedApp) {
     throw new AppError(
       "CONFIG_ERROR",
-      "This profile is not configured for self-managed auth. Run `ebay config auth --mode self-managed --client-id ... --client-secret ... --runame ...`."
+      "This profile does not have eBay app credentials configured. Run `ebay config auth --client-id ... --client-secret ... --runame ...`."
     );
   }
 
