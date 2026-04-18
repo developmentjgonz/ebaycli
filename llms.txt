@@ -1,10 +1,17 @@
 # ebaycli
 
-`ebaycli` is a local-token eBay CLI. The CLI stores the eBay OAuth session locally. The backend keeps the shared eBay app secret server-side, performs OAuth code exchange and refresh, and executes eBay API operations with the token presented by the CLI.
+`ebaycli` is an agent-first local eBay CLI with two auth modes:
+
+- `shared`: the hosted backend acts as a small auth broker for the shared eBay app
+- `self-managed`: the user provides their own eBay app credentials and the CLI exchanges tokens directly with eBay
+
+In both modes the CLI stores the eBay OAuth session locally and owns listing/setup workflow logic.
 
 ## Project status
 
-- Single shipped auth model: local eBay session in the CLI profile
+- Local eBay session stored in the CLI profile
+- Shared mode is the default
+- Self-managed mode is an advanced escape hatch
 - No backend user-account or store-owner model in the active product path
 - Supports both eBay listing models:
   - Trading/classic listings for active and sold reads, legacy listing detail, and legacy update/end flows
@@ -22,6 +29,10 @@
 
 - `node dist/index.js guide --json`
   - Return machine-readable project guidance for agents
+- `node dist/index.js config auth --mode shared`
+  - Use the hosted backend as the shared-mode auth broker
+- `node dist/index.js config auth --mode self-managed --client-id ... --client-secret ... --runame ...`
+  - Configure direct eBay OAuth for a user-managed eBay app
 - `node dist/index.js auth login --environment production`
   - Start local eBay OAuth and store the resulting session in the selected CLI profile
 - `node dist/index.js auth status --json`
@@ -68,8 +79,8 @@ Use those commands before drafting listing files or deciding whether a listing o
 - CLI/backend runtime logic: `/src/backend-domain.ts`
 - Local profile persistence: `/src/backend-config.ts`
 - Backend routes: `/backend/EbayStoreManager.Api/Program.cs`
-- Backend eBay gateway: `/backend/EbayStoreManager.Api/Services/EbayMarketplaceGateway.cs`
-- Backend listing orchestration: `/backend/EbayStoreManager.Api/Services/LocalEbayStoreService.cs`
+- Local direct eBay client: `/src/ebay-api.ts`
+- Local listing/setup engine: `/src/ebay-engine.ts`
 
 ## Testing
 

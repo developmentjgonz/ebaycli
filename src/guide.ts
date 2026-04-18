@@ -64,11 +64,31 @@ function normalizeTopic(topic?: string): GuideTopic {
 
 function buildOverviewGuide() {
   return {
-    model: "local-token",
+    model: "agent-first-local-cli",
     summary:
-      "The CLI stores the eBay session locally and uses the backend only for OAuth exchange, refresh, normalization, and eBay API execution.",
+      "The CLI stores the eBay session locally, keeps listing/setup logic local, and supports two auth modes: shared mode via a tiny backend auth broker and self-managed mode for users who bring their own eBay app credentials.",
+    authModes: {
+      shared: {
+        default: true,
+        purpose: "Use the hosted backend as an auth broker for the shared eBay app. Normal end-user path.",
+        setup: [
+          "Run `ebay auth login --environment production`.",
+          "The CLI uses the configured backend only for OAuth bootstrap and token refresh."
+        ]
+      },
+      selfManaged: {
+        default: false,
+        purpose: "Advanced path. The user provides their own eBay Client ID, Client Secret, and RuName.",
+        setup: [
+          "Run `ebay config auth --mode self-managed --client-id ... --client-secret ... --runame ...`.",
+          "Optional URLs default to the configured backend: `/privacy`, `/auth/success`, `/auth/declined`."
+        ]
+      }
+    },
     topics: ["capabilities", "workflows", "listing-spec", "agent-notes"],
     coreCommands: [
+      "ebay config auth --mode shared",
+      "ebay config auth --mode self-managed --client-id ... --client-secret ... --runame ...",
       "ebay auth login --environment production",
       "ebay auth status --json",
       "ebay setup doctor --json",
@@ -83,10 +103,24 @@ function buildOverviewGuide() {
 
 function buildCapabilitiesGuide() {
   return {
+    config: [
+      {
+        command: "ebay config set --backend-url <url>",
+        purpose: "Override the hosted backend URL for shared-mode auth brokering and the default public auth/privacy pages."
+      },
+      {
+        command: "ebay config auth --mode shared",
+        purpose: "Use the hosted backend as the shared-mode auth broker."
+      },
+      {
+        command: "ebay config auth --mode self-managed --client-id ... --client-secret ... --runame ...",
+        purpose: "Enable self-managed auth and store the user-provided eBay app credentials in the local CLI profile."
+      }
+    ],
     auth: [
       {
         command: "ebay auth login",
-        purpose: "Run eBay OAuth locally and store the refresh/access token in the selected CLI profile."
+        purpose: "Run eBay OAuth locally and store the refresh/access token in the selected CLI profile. Shared mode uses the backend broker; self-managed mode exchanges directly with eBay."
       },
       {
         command: "ebay auth status",
@@ -154,7 +188,8 @@ function buildWorkflowGuide() {
   return {
     connect: {
       steps: [
-        "Run `ebay auth login --environment production` or `--environment sandbox`.",
+        "If you are a normal user, keep shared mode and run `ebay auth login --environment production` or `--environment sandbox`.",
+        "If you are bringing your own eBay app, run `ebay config auth --mode self-managed --client-id ... --client-secret ... --runame ...` first.",
         "Finish the eBay consent flow in the browser.",
         "Run `ebay auth status --json` to verify the local session."
       ]

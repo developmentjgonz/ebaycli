@@ -8,4 +8,11 @@ describe("CLI shape", () => {
     const commandNames = cli.commands.map((command) => command.name());
     expect(commandNames).toEqual(["guide", "config", "auth", "setup", "listings"]);
   });
+
+  it("exposes the dual-mode auth config surface", () => {
+    const cli = createCli();
+    const config = cli.commands.find((command) => command.name() === "config");
+    expect(config).toBeDefined();
+    expect(config?.commands.map((command) => command.name())).toEqual(["set", "auth", "status"]);
+  });
 });

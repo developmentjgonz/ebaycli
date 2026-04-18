@@ -118,7 +118,10 @@ app.MapGet("/", () => Results.Redirect("/swagger"));
 app.MapGet("/health", () => TypedResults.Ok(new { status = "ok", utc = DateTimeOffset.UtcNow }));
 app.MapGet("/ready", () => TypedResults.Ok(new { status = "ready", utc = DateTimeOffset.UtcNow }));
 app.MapGet("/llms.txt", () => Results.Text(BuildLlmsText(), "text/plain", Encoding.UTF8));
+app.MapGet("/privacy", (IOptions<LegalOptions> options) => Results.Text(BuildPrivacyPolicy(options.Value), "text/html", Encoding.UTF8));
 app.MapGet("/privacy-policy", (IOptions<LegalOptions> options) => Results.Text(BuildPrivacyPolicy(options.Value), "text/html", Encoding.UTF8));
+app.MapGet("/auth/success", (HttpRequest request, IOptions<LegalOptions> options) => Results.Text(BuildAuthLandingPage("Authorization complete", "You can return to the CLI now. If the CLI is waiting in manual paste mode, paste the full URL from this page back into the terminal.", request, options.Value), "text/html", Encoding.UTF8));
+app.MapGet("/auth/declined", (HttpRequest request, IOptions<LegalOptions> options) => Results.Text(BuildAuthLandingPage("Authorization declined", "The eBay consent flow was declined or canceled. You can close this page and retry the login command from the CLI when ready.", request, options.Value), "text/html", Encoding.UTF8));
 app.MapGet("/notifications/ebay/marketplace-account-deletion", HandleMarketplaceAccountDeletionChallenge);
 app.MapPost("/notifications/ebay/marketplace-account-deletion", HandleMarketplaceAccountDeletionNotificationAsync);
 
@@ -481,16 +484,63 @@ static string BuildPrivacyPolicy(LegalOptions options)
 """;
 }
 
+static string BuildAuthLandingPage(string title, string message, HttpRequest request, LegalOptions options)
+{
+    var fullUrl = $"{request.Scheme}://{request.Host}{request.Path}{request.QueryString}";
+    var queryItems = request.Query.Count == 0
+        ? string.Empty
+        : string.Join("", request.Query.Select(pair =>
+            $"<li><strong>{WebUtility.HtmlEncode(pair.Key)}</strong>: {WebUtility.HtmlEncode(pair.Value.ToString())}</li>"));
+    var querySection = string.IsNullOrWhiteSpace(queryItems)
+        ? string.Empty
+        : $"""
+  <h2>Return data</h2>
+  <p>If your CLI is waiting for manual completion, copy and paste the full URL below back into the terminal.</p>
+  <p><code>{WebUtility.HtmlEncode(fullUrl)}</code></p>
+  <ul>{queryItems}</ul>
+""";
+
+    return $$"""
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{WebUtility.HtmlEncode(title)}} · {{WebUtility.HtmlEncode(options.CompanyName)}}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 2rem auto; max-width: 48rem; padding: 0 1rem; line-height: 1.6; color: #111827; }
+    .card { border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 1.25rem; background: #ffffff; }
+    code { display: inline-block; background: #f3f4f6; padding: 0.15rem 0.35rem; border-radius: 0.25rem; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>{{WebUtility.HtmlEncode(title)}}</h1>
+    <p>{{WebUtility.HtmlEncode(message)}}</p>
+    {{querySection}}
+    <p>Privacy: <a href="{{WebUtility.HtmlEncode(options.WebsiteUrl)}}/privacy">{{WebUtility.HtmlEncode(options.WebsiteUrl)}}/privacy</a></p>
+  </div>
+</body>
+</html>
+""";
+}
+
 static string BuildLlmsText()
 {
     return """
 # ebaycli
 
-ebaycli is a local-token eBay CLI. The CLI stores the eBay OAuth session locally. The backend keeps the shared eBay app secret server-side, performs OAuth code exchange and refresh, and executes eBay API operations with the token presented by the CLI.
+ebaycli is an agent-first local eBay CLI with two auth modes:
+
+- shared mode: the backend holds the shared eBay app credentials and acts as a small auth broker
+- self-managed mode: the user provides their own eBay app credentials and the CLI talks directly to eBay for token exchange
+
+In both modes the CLI stores the eBay OAuth session locally and owns listing/setup workflow logic.
 
 ## Project status
 
-- Single shipped auth model: local eBay session in the CLI profile
+- Shared mode is the default
+- Self-managed mode is the advanced escape hatch
 - No backend user-account or store-owner model in the active product path
 - Supports both eBay listing models:
   - Trading/classic listings for active and sold reads, legacy listing detail, and legacy update/end flows
@@ -501,6 +551,9 @@ ebaycli is a local-token eBay CLI. The CLI stores the eBay OAuth session locally
 
 - Public API/docs entrypoint: /swagger
 - Health: /health
+- Privacy: /privacy
+- Auth success landing page: /auth/success
+- Auth declined landing page: /auth/declined
 - Main human-readable docs live in the repository README
 - Prefer the local CLI guide surface for exact agent workflows
 
@@ -508,6 +561,10 @@ ebaycli is a local-token eBay CLI. The CLI stores the eBay OAuth session locally
 
 - node dist/index.js guide --json
   - Return machine-readable project guidance for agents
+- node dist/index.js config auth --mode shared
+  - Use the hosted backend as the shared-mode auth broker
+- node dist/index.js config auth --mode self-managed --client-id ... --client-secret ... --runame ...
+  - Configure direct eBay OAuth for a user-managed eBay app
 - node dist/index.js auth login --environment production
   - Start local eBay OAuth and store the resulting session in the selected CLI profile
 - node dist/index.js auth status --json

@@ -25,6 +25,7 @@ import {
   resolveBackendProfile,
   upsertBackendProfile
 } from "./backend-config.js";
+import { DEFAULT_BACKEND_BASE_URL } from "./constants.js";
 import { AppError } from "./errors.js";
 import { getGuide } from "./guide.js";
 import {
@@ -50,6 +51,20 @@ function getGlobalOptions(command: Command): GlobalOptions {
   }
 
   return ((command.opts() as Partial<GlobalOptions>) ?? { profile: "default", json: false }) as GlobalOptions;
+}
+
+function redactProfile(profile: ReturnType<typeof resolveBackendProfile>) {
+  if (!profile.selfManagedApp) {
+    return profile;
+  }
+
+  return {
+    ...profile,
+    selfManagedApp: {
+      ...profile.selfManagedApp,
+      clientSecret: "***redacted***"
+    }
+  };
 }
 
 export function createCli(): Command {
@@ -84,11 +99,49 @@ export function createCli(): Command {
     });
 
   config
+    .command("auth")
+    .description("Configure auth mode and self-managed eBay app credentials for this profile")
+    .requiredOption("--mode <mode>", "shared or self-managed")
+    .option("--client-id <clientId>")
+    .option("--client-secret <clientSecret>")
+    .option("--runame <runame>")
+    .option("--environment <environment>", "production or sandbox", "production")
+    .option("--privacy-policy-url <url>")
+    .option("--accepted-url <url>")
+    .option("--declined-url <url>")
+    .action(async (options, command: Command) => {
+      const global = getGlobalOptions(command);
+      const existingProfile = resolveBackendProfile(global.profile);
+      const nextMode = options.mode === "self-managed" ? "self-managed" : "shared";
+      const authSiteBaseUrl = (existingProfile.backendBaseUrl ?? DEFAULT_BACKEND_BASE_URL).replace(/\/$/, "");
+      const profile = upsertBackendProfile({
+        name: global.profile,
+        authMode: nextMode,
+        ...(nextMode === "self-managed"
+          ? {
+              selfManagedApp: {
+                environment: options.environment,
+                clientId: options.clientId,
+                clientSecret: options.clientSecret,
+                runame: options.runame,
+                privacyPolicyUrl: options.privacyPolicyUrl ?? `${authSiteBaseUrl}/privacy`,
+                acceptedUrl: options.acceptedUrl ?? `${authSiteBaseUrl}/auth/success`,
+                declinedUrl: options.declinedUrl ?? `${authSiteBaseUrl}/auth/declined`
+              }
+            }
+          : {
+              selfManagedApp: undefined
+            })
+      });
+      renderResult(redactProfile(profile), Boolean(global.json));
+    });
+
+  config
     .command("status")
     .description("Show backend configuration for this CLI profile")
     .action(async (_, command: Command) => {
       const global = getGlobalOptions(command);
-      renderResult(resolveBackendProfile(global.profile), Boolean(global.json));
+      renderResult(redactProfile(resolveBackendProfile(global.profile)), Boolean(global.json));
     });
 
   const auth = program.command("auth").description("Connect eBay locally and inspect the current local session");

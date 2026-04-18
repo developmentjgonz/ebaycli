@@ -1,12 +1,16 @@
 # EbayStoreManager.Api
 
-`EbayStoreManager.Api` is the backend that supports the local-token CLI model:
+`EbayStoreManager.Api` is the shared-mode auth broker and public service surface for `ebaycli`.
 
-- the backend owns the shared eBay app credentials
-- the CLI starts eBay OAuth with a localhost callback
-- the backend exchanges the auth code and refreshes tokens
-- the CLI stores the returned eBay session locally
-- listing and setup calls post that local session context back to the backend for execution
+Primary responsibilities:
+
+- hold the shared eBay app credentials server-side
+- start shared-mode OAuth bootstrap
+- exchange and refresh tokens for shared mode
+- host public privacy and auth landing pages
+- expose the marketplace account deletion webhook
+
+The CLI owns the local eBay session and is the primary product surface. Self-managed mode bypasses the broker for token exchange and talks directly to eBay from the CLI.
 
 ## Local run
 
@@ -73,7 +77,10 @@ https://your-public-api-host/notifications/ebay/marketplace-account-deletion
 For production OAuth/privacy configuration, the service can also publicly serve:
 
 ```text
+https://your-public-api-host/privacy
 https://your-public-api-host/privacy-policy
+https://your-public-api-host/auth/success
+https://your-public-api-host/auth/declined
 https://your-public-api-host/llms.txt
 ```
 
@@ -125,22 +132,25 @@ curl -X POST http://localhost:5141/api/local/ebay/status \
 - `GET /health`
 - `GET /ready`
 - `GET /llms.txt`
+- `GET /privacy`
 - `GET /privacy-policy`
+- `GET /auth/success`
+- `GET /auth/declined`
 - `POST /api/local/ebay/authorize/start`
 - `POST /api/local/ebay/authorize/exchange`
 - `POST /api/local/ebay/refresh`
-- `POST /api/local/ebay/status`
-- `POST /api/local/ebay/setup/doctor`
-- `POST /api/local/ebay/setup/policies/sync`
-- `POST /api/local/ebay/setup/location`
-- `POST /api/local/ebay/listings/list`
-- `POST /api/local/ebay/listings/get`
-- `POST /api/local/ebay/listings/create/plan`
-- `POST /api/local/ebay/listings/create/apply`
-- `POST /api/local/ebay/listings/update/plan`
-- `POST /api/local/ebay/listings/update/apply`
-- `POST /api/local/ebay/listings/end/plan`
-- `POST /api/local/ebay/listings/end/apply`
+- `POST /api/local/ebay/status` (compatibility runtime route)
+- `POST /api/local/ebay/setup/doctor` (compatibility runtime route)
+- `POST /api/local/ebay/setup/policies/sync` (compatibility runtime route)
+- `POST /api/local/ebay/setup/location` (compatibility runtime route)
+- `POST /api/local/ebay/listings/list` (compatibility runtime route)
+- `POST /api/local/ebay/listings/get` (compatibility runtime route)
+- `POST /api/local/ebay/listings/create/plan` (compatibility runtime route)
+- `POST /api/local/ebay/listings/create/apply` (compatibility runtime route)
+- `POST /api/local/ebay/listings/update/plan` (compatibility runtime route)
+- `POST /api/local/ebay/listings/update/apply` (compatibility runtime route)
+- `POST /api/local/ebay/listings/end/plan` (compatibility runtime route)
+- `POST /api/local/ebay/listings/end/apply` (compatibility runtime route)
 - `GET /oauth/ebay/callback`
 - `GET /notifications/ebay/marketplace-account-deletion`
 - `POST /notifications/ebay/marketplace-account-deletion`

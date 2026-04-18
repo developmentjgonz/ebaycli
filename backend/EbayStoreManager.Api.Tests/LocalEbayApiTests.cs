@@ -12,13 +12,32 @@ public sealed class LocalEbayApiTests
         await using var factory = new TestWebApplicationFactory();
         using var client = factory.CreateClient();
 
-        var response = await client.GetAsync("/privacy-policy");
+        var response = await client.GetAsync("/privacy");
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("Privacy Policy", body);
         Assert.Contains("privacy@example.test", body);
         Assert.Contains("Test Privacy Company", body);
+    }
+
+    [Fact]
+    public async Task AuthLandingPages_AreServedPublicly()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        using var client = factory.CreateClient();
+
+        var success = await client.GetAsync("/auth/success?code=abc123&state=state-1");
+        success.EnsureSuccessStatusCode();
+        var successBody = await success.Content.ReadAsStringAsync();
+        Assert.Contains("Authorization complete", successBody);
+        Assert.Contains("abc123", successBody);
+        Assert.Contains("/privacy", successBody);
+
+        var declined = await client.GetAsync("/auth/declined");
+        declined.EnsureSuccessStatusCode();
+        var declinedBody = await declined.Content.ReadAsStringAsync();
+        Assert.Contains("Authorization declined", declinedBody);
     }
 
     [Fact]

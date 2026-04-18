@@ -2,6 +2,20 @@ import { z } from "zod";
 
 import { DEFAULT_BACKEND_BASE_URL, DEFAULT_PROFILE } from "./constants.js";
 
+export const authModeSchema = z.enum(["shared", "self-managed"]);
+export type AuthMode = z.infer<typeof authModeSchema>;
+
+export const selfManagedAppSchema = z.object({
+  environment: z.enum(["production", "sandbox"]).default("production"),
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
+  runame: z.string().min(1),
+  privacyPolicyUrl: z.string().url().optional(),
+  acceptedUrl: z.string().url().optional(),
+  declinedUrl: z.string().url().optional()
+});
+export type SelfManagedApp = z.infer<typeof selfManagedAppSchema>;
+
 export const localEbaySessionSchema = z.object({
   environment: z.string(),
   marketplaceId: z.string(),
@@ -25,6 +39,8 @@ export type LocalEbaySession = z.infer<typeof localEbaySessionSchema>;
 export const backendProfileSchema = z.object({
   name: z.string().min(1).default(DEFAULT_PROFILE),
   backendBaseUrl: z.string().url().default(DEFAULT_BACKEND_BASE_URL),
+  authMode: authModeSchema.default("shared"),
+  selfManagedApp: selfManagedAppSchema.optional(),
   ebaySession: localEbaySessionSchema.optional(),
   outputFormat: z.enum(["text", "json"]).default("text")
 });

@@ -1,12 +1,15 @@
 # ebaycli
 
-`ebaycli` is now a single-model product:
+`ebaycli` is an agent-first local eBay CLI with two auth modes:
+
+- `shared` mode, which uses the hosted backend as a small auth broker for the shared eBay app
+- `self-managed` mode, where an advanced user brings their own eBay app credentials
+
+In both modes:
 
 - the local CLI owns the eBay OAuth session for the current machine
-- the backend keeps the shared eBay app secret server-side
-- the backend exchanges and refreshes tokens, then executes listing operations with the token the CLI presents
-
-There is no backend user account flow and no backend store-owner model in the shipped CLI path anymore.
+- listing and seller workflow logic live in the CLI
+- there is no backend user-account or store-owner model in the active product path
 
 ## CLI quick start
 
@@ -17,6 +20,7 @@ npm install
 npm run build
 
 node dist/index.js guide --json
+node dist/index.js config auth --mode shared
 node dist/index.js auth login --environment sandbox
 node dist/index.js auth status --json
 node dist/index.js auth disconnect --json
@@ -29,6 +33,18 @@ For a published install:
 ```bash
 npm install -g ebaycli
 ebay guide --json
+ebay auth login --environment production
+```
+
+For self-managed mode:
+
+```bash
+ebay config auth \
+  --mode self-managed \
+  --client-id YOUR_CLIENT_ID \
+  --client-secret YOUR_CLIENT_SECRET \
+  --runame YOUR_RUNAME
+
 ebay auth login --environment production
 ```
 
@@ -59,6 +75,10 @@ Use that output before generating listing drafts or choosing write operations.
 
 The repository also ships a root `llms.txt` file for LLM/tooling discovery.
 
+## Design docs
+
+- [docs/agent-first-architecture.md](docs/agent-first-architecture.md) describes the target architecture this branch is implementing: local listing logic, shared-mode auth broker, and self-managed auth for advanced users.
+
 ## Listing model support
 
 The backend supports both eBay listing models:
@@ -74,7 +94,10 @@ The deployed backend now exposes:
 - `/health`
 - `/ready`
 - `/llms.txt`
+- `/privacy`
 - `/privacy-policy`
+- `/auth/success`
+- `/auth/declined`
 
 ## Config
 
@@ -85,6 +108,24 @@ node dist/index.js config set --backend-url https://your-backend.example.com
 node dist/index.js config status --json
 ```
 
+Auth mode is configured per local profile:
+
+```bash
+node dist/index.js config auth --mode shared
+
+node dist/index.js config auth \
+  --mode self-managed \
+  --client-id YOUR_CLIENT_ID \
+  --client-secret YOUR_CLIENT_SECRET \
+  --runame YOUR_RUNAME
+```
+
+When you enable self-managed mode and do not pass explicit URLs, the CLI defaults these values from the configured backend URL:
+
+- privacy policy: `/privacy`
+- accepted URL: `/auth/success`
+- declined URL: `/auth/declined`
+
 The CLI stores its local eBay session in the profile config file under `~/.config/ebaycli/backend-profiles.json` unless `XDG_CONFIG_HOME` is set.
 
 To remove access cleanly:
@@ -94,6 +135,12 @@ To remove access cleanly:
 
 ## Backend
 
-The backend lives in [/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api) and exposes the local-token eBay routes plus the marketplace account deletion webhook.
+The backend lives in [/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api). In the target architecture it is primarily:
+
+- the shared-mode auth broker
+- the host for public privacy/auth landing pages
+- the marketplace account deletion webhook endpoint
+
+Compatibility listing routes still exist on the backend, but the branch direction is to keep listing/setup logic local in the CLI.
 
 For backend setup and endpoints, see [backend/EbayStoreManager.Api/README.md](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api/README.md).

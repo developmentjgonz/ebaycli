@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { APP_NAME, DEFAULT_PROFILE } from "./constants.js";
 import { AppError } from "./errors.js";
-import { type BackendProfile, type LocalEbaySession, backendProfileSchema } from "./backend-types.js";
+import { type BackendProfile, type LocalEbaySession, type SelfManagedApp, backendProfileSchema } from "./backend-types.js";
 
 interface ProfilesFile {
   profiles: BackendProfile[];
@@ -58,6 +58,8 @@ export function upsertBackendProfile(input: Partial<BackendProfile> & Pick<Backe
   const merged = backendProfileSchema.parse({
     name: input.name,
     backendBaseUrl: input.backendBaseUrl ?? existing?.backendBaseUrl,
+    authMode: input.authMode ?? existing?.authMode,
+    selfManagedApp: input.selfManagedApp ?? existing?.selfManagedApp,
     ebaySession: input.ebaySession ?? existing?.ebaySession,
     outputFormat: input.outputFormat ?? existing?.outputFormat
   });
@@ -76,7 +78,7 @@ export function resolveBackendProfile(name = DEFAULT_PROFILE): BackendProfile {
 
 export function requireConfiguredBackendProfile(name = DEFAULT_PROFILE): BackendProfile {
   const profile = resolveBackendProfile(name);
-  if (!profile.backendBaseUrl) {
+  if (profile.authMode === "shared" && !profile.backendBaseUrl) {
     throw new AppError("CONFIG_ERROR", "Backend URL is not configured. Run `ebay config set --backend-url <url>`.");
   }
 
@@ -106,4 +108,15 @@ export function requireLocalEbaySession(profile: BackendProfile): LocalEbaySessi
   }
 
   return profile.ebaySession;
+}
+
+export function requireSelfManagedApp(profile: BackendProfile): SelfManagedApp {
+  if (profile.authMode !== "self-managed" || !profile.selfManagedApp) {
+    throw new AppError(
+      "CONFIG_ERROR",
+      "This profile is not configured for self-managed auth. Run `ebay config auth --mode self-managed --client-id ... --client-secret ... --runame ...`."
+    );
+  }
+
+  return profile.selfManagedApp;
 }

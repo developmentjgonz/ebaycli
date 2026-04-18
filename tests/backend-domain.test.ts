@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  beginLocalEbayAuthorization,
   createOrSetLocalLocation,
   getLocalConnectionStatus,
   listLocalListings,
@@ -17,7 +18,11 @@ import { loadBackendProfiles, upsertBackendProfile } from "../src/backend-config
 const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
 
 afterEach(() => {
-  process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
+  if (originalXdgConfigHome === undefined) {
+    delete process.env.XDG_CONFIG_HOME;
+  } else {
+    process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
+  }
   vi.unstubAllGlobals();
 });
 
@@ -98,6 +103,57 @@ describe("parseListingPatchFile", () => {
 });
 
 describe("local eBay session flows", () => {
+  it("builds self-managed authorization locally with the configured eBay app", async () => {
+    const profile = upsertBackendProfile({
+      name: "self-managed",
+      authMode: "self-managed",
+      selfManagedApp: {
+        environment: "sandbox",
+        clientId: "sandbox-client-id",
+        clientSecret: "sandbox-client-secret",
+        runame: "sandbox-runame",
+        privacyPolicyUrl: "https://example.test/privacy",
+        acceptedUrl: "https://example.test/auth/success",
+        declinedUrl: "https://example.test/auth/declined"
+      }
+    });
+
+    const result = await beginLocalEbayAuthorization(profile, {
+      environment: "sandbox",
+      callbackUrl: "https://example.test/auth/success",
+      marketplaceId: "EBAY_US"
+    });
+
+    expect(result.environment).toBe("sandbox");
+    expect(result.authorizeUrl).toContain("https://auth.sandbox.ebay.com/oauth2/authorize");
+    expect(result.authorizeUrl).toContain("client_id=sandbox-client-id");
+    expect(result.authorizeUrl).toContain("redirect_uri=sandbox-runame");
+  });
+
+  it("rejects self-managed authorization when the requested environment does not match the configured app", async () => {
+    const profile = upsertBackendProfile({
+      name: "self-managed-mismatch",
+      authMode: "self-managed",
+      selfManagedApp: {
+        environment: "production",
+        clientId: "prod-client-id",
+        clientSecret: "prod-client-secret",
+        runame: "prod-runame",
+        privacyPolicyUrl: "https://example.test/privacy",
+        acceptedUrl: "https://example.test/auth/success",
+        declinedUrl: "https://example.test/auth/declined"
+      }
+    });
+
+    await expect(
+      beginLocalEbayAuthorization(profile, {
+        environment: "sandbox",
+        callbackUrl: "https://example.test/auth/success",
+        marketplaceId: "EBAY_US"
+      })
+    ).rejects.toThrow(/configured for self-managed production auth/i);
+  });
+
   it("refreshes expired local sessions and persists the new tokens before calling status", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ebaycli-config-"));
     process.env.XDG_CONFIG_HOME = dir;
@@ -134,16 +190,21 @@ describe("local eBay session flows", () => {
         );
       }
 
-      if (url.endsWith("/api/local/ebay/status")) {
-        const body = JSON.parse(String(init?.body)) as Record<string, { accessToken?: string }>;
-        expect(body.session?.accessToken).toBe("fresh-access-token");
+      if (url.endsWith("/commerce/identity/v1/user/")) {
         return new Response(
           JSON.stringify({
-            storeOwnerSlug: "local",
-            connected: true,
-            environment: "sandbox",
-            marketplaceId: "EBAY_US",
-            ebayUsername: "testuser_refresh"
+            userId: "user-123",
+            username: "testuser_refresh"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith("/sell/account/v1/privilege")) {
+        expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe("Bearer fresh-access-token");
+        return new Response(
+          JSON.stringify({
+            sellerRegistrationCompleted: true
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         );
@@ -157,7 +218,8 @@ describe("local eBay session flows", () => {
     try {
       const status = await getLocalConnectionStatus(profile);
       expect(status.connected).toBe(true);
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(status.ebayUsername).toBe("testuser_refresh");
+      expect(fetchMock).toHaveBeenCalledTimes(3);
 
       const persisted = loadBackendProfiles()[0];
       expect(persisted?.ebaySession?.accessToken).toBe("fresh-access-token");
@@ -167,7 +229,7 @@ describe("local eBay session flows", () => {
     }
   });
 
-  it("persists local policy defaults and location defaults returned by the backend", async () => {
+  it("persists local policy defaults and location defaults from direct eBay responses", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ebaycli-config-"));
     process.env.XDG_CONFIG_HOME = dir;
 
@@ -185,28 +247,35 @@ describe("local eBay session flows", () => {
     });
 
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.endsWith("/api/local/ebay/setup/policies/sync")) {
-        const body = JSON.parse(String(init?.body)) as Record<string, { accessToken?: string }>;
-        expect(body.session?.accessToken).toBe("access-token");
+      if (url.includes("/sell/account/v1/payment_policy?")) {
         return new Response(
           JSON.stringify({
-            defaults: {
-              paymentPolicyId: "payment-123",
-              returnPolicyId: "return-123",
-              fulfillmentPolicyId: "fulfillment-123"
-            }
+            paymentPolicies: [{ paymentPolicyId: "payment-123" }]
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         );
       }
 
-      if (url.endsWith("/api/local/ebay/setup/location")) {
+      if (url.includes("/sell/account/v1/return_policy?")) {
         return new Response(
           JSON.stringify({
-            merchantLocationKey: "warehouse-a"
+            returnPolicies: [{ returnPolicyId: "return-123" }]
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         );
+      }
+
+      if (url.includes("/sell/account/v1/fulfillment_policy?")) {
+        return new Response(
+          JSON.stringify({
+            fulfillmentPolicies: [{ fulfillmentPolicyId: "fulfillment-123" }]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith("/sell/inventory/v1/location/warehouse-a") && init?.method === "POST") {
+        return new Response("", { status: 204 });
       }
 
       throw new Error(`Unexpected URL ${url}`);
@@ -233,7 +302,7 @@ describe("local eBay session flows", () => {
     }
   });
 
-  it("sends listing list filters for status paging and sold lookback", async () => {
+  it("sends listing list filters for sold lookback through Trading", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ebaycli-config-"));
     process.env.XDG_CONFIG_HOME = dir;
 
@@ -250,17 +319,26 @@ describe("local eBay session flows", () => {
       outputFormat: "json"
     });
 
-    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      expect(body.status).toBe("SOLD");
-      expect(body.page).toBe(2);
-      expect(body.limit).toBe(50);
-      expect(body.days).toBe(30);
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://api.ebay.com/ws/api.dll");
+      expect((init?.headers as Record<string, string> | undefined)?.["X-EBAY-API-CALL-NAME"]).toBe("GetMyeBaySelling");
+      const body = String(init?.body);
+      expect(body).toContain("<SoldList>");
+      expect(body).toContain("<DurationInDays>30</DurationInDays>");
+      expect(body).toContain("<PageNumber>2</PageNumber>");
+      expect(body).toContain("<EntriesPerPage>50</EntriesPerPage>");
 
-      return new Response(JSON.stringify([]), {
-        status: 200,
-        headers: { "content-type": "application/json" }
-      });
+      return new Response(
+        [
+          "<GetMyeBaySellingResponse>",
+          "  <Ack>Success</Ack>",
+          "  <SoldList>",
+          "    <PaginationResult><TotalNumberOfEntries>0</TotalNumberOfEntries></PaginationResult>",
+          "  </SoldList>",
+          "</GetMyeBaySellingResponse>"
+        ].join(""),
+        { status: 200, headers: { "content-type": "text/xml" } }
+      );
     });
 
     vi.stubGlobal("fetch", fetchMock);

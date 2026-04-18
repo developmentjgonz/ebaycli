@@ -1,14 +1,34 @@
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
 import { promisify } from "node:util";
 
 import YAML from "yaml";
 
 import { BackendApiClient } from "./backend-client.js";
-import { getBackendProfile, requireLocalEbaySession, upsertBackendProfile } from "./backend-config.js";
+import { getBackendProfile, requireLocalEbaySession, requireSelfManagedApp, upsertBackendProfile } from "./backend-config.js";
 import { DEFAULT_CALLBACK_PORT } from "./constants.js";
+import { DefaultScopes, EbayApiClient, buildAuthorizeUrl, resolveEbayEnvironment } from "./ebay-api.js";
+import {
+  createListingDirect,
+  endListingDirect,
+  getConnectionStatusDirect,
+  getListingDirect,
+  listListingsDirect,
+  optInPolicyProgramDirect,
+  planCreateDirect,
+  planEndDirect,
+  planUpdateDirect,
+  pullListingDirect,
+  runDoctorDirect,
+  syncPoliciesDirect,
+  updateListingDirect,
+  upsertLocationDirect
+} from "./ebay-engine.js";
 import { AppError } from "./errors.js";
 import {
   type BackendProfile,
@@ -19,6 +39,7 @@ import {
   type ListingSummary,
   type LocalEbayAuthStartResponse,
   type LocalEbaySession,
+  type SelfManagedApp,
   type MutationPlanResponse
 } from "./backend-types.js";
 
@@ -61,6 +82,24 @@ export async function beginLocalEbayAuthorization(
   profile: BackendProfile,
   request: { environment: string; callbackUrl: string; marketplaceId?: string }
 ): Promise<LocalEbayAuthStartResponse> {
+  if (profile.authMode === "self-managed") {
+    const app = requireSelfManagedApp(profile);
+    if (request.environment !== app.environment) {
+      throw new AppError(
+        "CONFIG_ERROR",
+        `This profile is configured for self-managed ${app.environment} auth. Re-run \`ebay auth login --environment ${app.environment}\` or update \`ebay config auth --environment ...\`.`
+      );
+    }
+    const state = randomBytes(24).toString("hex");
+    return {
+      authorizeUrl: buildAuthorizeUrl(toAuthEnvironment(app, app.environment), state, DefaultScopes),
+      state,
+      environment: app.environment,
+      marketplaceId: request.marketplaceId ?? "EBAY_US",
+      expiresAtUtc: new Date(Date.now() + 10 * 60 * 1000).toISOString()
+    };
+  }
+
   return await new BackendApiClient(profile).post<LocalEbayAuthStartResponse>("/api/local/ebay/authorize/start", request);
 }
 
@@ -68,10 +107,20 @@ export async function exchangeLocalEbayAuthorization(
   profile: BackendProfile,
   request: { state: string; code: string }
 ): Promise<LocalEbaySession> {
+  if (profile.authMode === "self-managed") {
+    const app = requireSelfManagedApp(profile);
+    return await exchangeSelfManagedAuthorization(app, request.code);
+  }
+
   return await new BackendApiClient(profile).post<LocalEbaySession>("/api/local/ebay/authorize/exchange", request);
 }
 
 export async function refreshLocalEbaySession(profile: BackendProfile, session: LocalEbaySession): Promise<LocalEbaySession> {
+  if (profile.authMode === "self-managed") {
+    const app = requireSelfManagedApp(profile);
+    return await refreshSelfManagedSession(app, session);
+  }
+
   return await new BackendApiClient(profile).post<LocalEbaySession>("/api/local/ebay/refresh", {
     environment: session.environment,
     refreshToken: session.refreshToken,
@@ -87,7 +136,9 @@ export async function authenticateWithEbayLocally(
   profile: BackendProfile,
   options: { environment: string; marketplaceId?: string; shouldOpen?: boolean; timeoutMs?: number }
 ): Promise<{ session: LocalEbaySession; authorize: LocalEbayAuthStartResponse; opened: boolean; callbackUrl: string }> {
-  const callback = await startBrowserCallbackServer(DEFAULT_CALLBACK_PORT);
+  const callback = profile.authMode === "shared"
+    ? await startBrowserCallbackServer(DEFAULT_CALLBACK_PORT)
+    : await startSelfManagedAuthorizationListener(profile);
   try {
     const authorize = await beginLocalEbayAuthorization(profile, {
       environment: options.environment,
@@ -132,16 +183,12 @@ async function ensureFreshLocalEbaySession(profile: BackendProfile): Promise<Loc
 
 export async function getLocalConnectionStatus(profile: BackendProfile): Promise<EbayConnectionResponse> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await new BackendApiClient(profile).post<EbayConnectionResponse>("/api/local/ebay/status", {
-    session: toLocalSessionContext(session)
-  });
+  return await getConnectionStatusDirect(createExecutionClient(session), session);
 }
 
 export async function runLocalDoctor(profile: BackendProfile): Promise<DoctorReportResponse> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await new BackendApiClient(profile).post<DoctorReportResponse>("/api/local/ebay/setup/doctor", {
-    session: toLocalSessionContext(session)
-  });
+  return await runDoctorDirect(createExecutionClient(session), session);
 }
 
 export async function syncLocalPolicies(
@@ -154,31 +201,15 @@ export async function syncLocalPolicies(
   }
 ): Promise<{ result: unknown; session: LocalEbaySession }> {
   const session = await ensureFreshLocalEbaySession(profile);
-  const payload = options.createFromFile
-    ? {
-        session: toLocalSessionContext(session),
-        paymentPolicyId: options.paymentPolicyId,
-        returnPolicyId: options.returnPolicyId,
-        fulfillmentPolicyId: options.fulfillmentPolicyId,
-        createPayload: parseDataFile<unknown>(options.createFromFile)
-      }
-    : {
-        session: toLocalSessionContext(session),
-        paymentPolicyId: options.paymentPolicyId,
-        returnPolicyId: options.returnPolicyId,
-        fulfillmentPolicyId: options.fulfillmentPolicyId
-      };
-
-  const result = await new BackendApiClient(profile).post<Record<string, unknown>>("/api/local/ebay/setup/policies/sync", payload);
-  const defaults = isRecord(result.defaults) ? result.defaults : {};
-  const updatedSession: LocalEbaySession = {
-    ...session,
-    defaultPaymentPolicyId: typeof defaults.paymentPolicyId === "string" ? defaults.paymentPolicyId : session.defaultPaymentPolicyId,
-    defaultReturnPolicyId: typeof defaults.returnPolicyId === "string" ? defaults.returnPolicyId : session.defaultReturnPolicyId,
-    defaultFulfillmentPolicyId: typeof defaults.fulfillmentPolicyId === "string" ? defaults.fulfillmentPolicyId : session.defaultFulfillmentPolicyId
-  };
+  const direct = await syncPoliciesDirect(createExecutionClient(session), session, {
+    paymentPolicyId: options.paymentPolicyId,
+    returnPolicyId: options.returnPolicyId,
+    fulfillmentPolicyId: options.fulfillmentPolicyId,
+    createPayload: options.createFromFile ? parseDataFile<unknown>(options.createFromFile) : undefined
+  });
+  const updatedSession = direct.session;
   upsertBackendProfile({ name: profile.name, ebaySession: updatedSession });
-  return { result, session: updatedSession };
+  return { result: direct.result, session: updatedSession };
 }
 
 export async function optInLocalPolicyProgram(
@@ -186,10 +217,7 @@ export async function optInLocalPolicyProgram(
   programType = "SELLING_POLICY_MANAGEMENT"
 ): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await new BackendApiClient(profile).post("/api/local/ebay/setup/policies/opt-in", {
-    session: toLocalSessionContext(session),
-    programType
-  });
+  return await optInPolicyProgramDirect(createExecutionClient(session), session, programType);
 }
 
 export async function createOrSetLocalLocation(
@@ -197,17 +225,13 @@ export async function createOrSetLocalLocation(
   options: { key?: string; file?: string }
 ): Promise<{ result: unknown; session: LocalEbaySession }> {
   const session = await ensureFreshLocalEbaySession(profile);
-  const result = await new BackendApiClient(profile).post<Record<string, unknown>>("/api/local/ebay/setup/location", {
-    session: toLocalSessionContext(session),
-    merchantLocationKey: options.key,
-    ...(options.file ? { locationPayload: parseDataFile<unknown>(options.file) } : {})
+  const direct = await upsertLocationDirect(createExecutionClient(session), session, {
+    key: options.key,
+    payload: options.file ? parseDataFile<unknown>(options.file) : undefined
   });
-  const updatedSession: LocalEbaySession = {
-    ...session,
-    defaultLocationKey: typeof result.merchantLocationKey === "string" ? result.merchantLocationKey : session.defaultLocationKey
-  };
+  const updatedSession = direct.session;
   upsertBackendProfile({ name: profile.name, ebaySession: updatedSession });
-  return { result, session: updatedSession };
+  return { result: direct.result, session: updatedSession };
 }
 
 export async function listLocalListings(
@@ -215,81 +239,163 @@ export async function listLocalListings(
   options?: { status?: string; page?: number; limit?: number; days?: number }
 ): Promise<ListingSummary[]> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await new BackendApiClient(profile).post<ListingSummary[]>("/api/local/ebay/listings/list", {
-    session: toLocalSessionContext(session),
-    status: options?.status,
-    page: options?.page,
-    limit: options?.limit,
-    days: options?.days
-  });
+  return await listListingsDirect(createExecutionClient(session), session, options);
 }
 
 export async function getLocalListing(profile: BackendProfile, reference: string): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await new BackendApiClient(profile).post("/api/local/ebay/listings/get", {
-    session: toLocalSessionContext(session),
-    reference
-  });
+  return await getListingDirect(createExecutionClient(session), session, reference);
 }
 
 export async function pullLocalListing(profile: BackendProfile, reference: string, outputPath: string): Promise<unknown> {
-  const result = await getLocalListing(profile, reference) as { spec?: unknown };
-  if (!isRecord(result) || result.spec === undefined) {
-    throw new AppError("BACKEND_ERROR", "The backend did not return a listing spec.", result);
-  }
-
-  writeDataFile(outputPath, result.spec);
-  return result.spec;
+  const session = await ensureFreshLocalEbaySession(profile);
+  const spec = await pullListingDirect(createExecutionClient(session), session, reference);
+  writeDataFile(outputPath, spec);
+  return spec;
 }
 
 export async function createLocalListingPlan(profile: BackendProfile, request: ListingSpecRequest): Promise<MutationPlanResponse> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await new BackendApiClient(profile).post<MutationPlanResponse>("/api/local/ebay/listings/create/plan", {
-    session: toLocalSessionContext(session),
-    listing: request
-  });
+  return planCreateDirect(session, request);
 }
 
 export async function createLocalListing(profile: BackendProfile, request: ListingSpecRequest): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await new BackendApiClient(profile).post("/api/local/ebay/listings/create/apply", {
-    session: toLocalSessionContext(session),
-    listing: request
-  });
+  return await createListingDirect(createExecutionClient(session), session, request);
 }
 
 export async function updateLocalListingPlan(profile: BackendProfile, reference: string, request: ListingPatchRequest): Promise<MutationPlanResponse> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await new BackendApiClient(profile).post<MutationPlanResponse>("/api/local/ebay/listings/update/plan", {
-    session: toLocalSessionContext(session),
-    reference,
-    listing: request
-  });
+  return await planUpdateDirect(createExecutionClient(session), session, reference, request);
 }
 
 export async function updateLocalListing(profile: BackendProfile, reference: string, request: ListingPatchRequest): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await new BackendApiClient(profile).post("/api/local/ebay/listings/update/apply", {
-    session: toLocalSessionContext(session),
-    reference,
-    listing: request
-  });
+  return await updateListingDirect(createExecutionClient(session), session, reference, request);
 }
 
 export async function endLocalListingPlan(profile: BackendProfile, reference: string): Promise<MutationPlanResponse> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await new BackendApiClient(profile).post<MutationPlanResponse>("/api/local/ebay/listings/end/plan", {
-    session: toLocalSessionContext(session),
-    reference
-  });
+  return await planEndDirect(createExecutionClient(session), session, reference);
 }
 
 export async function endLocalListing(profile: BackendProfile, reference: string): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await new BackendApiClient(profile).post("/api/local/ebay/listings/end/apply", {
-    session: toLocalSessionContext(session),
-    reference
-  });
+  return await endListingDirect(createExecutionClient(session), session, reference);
+}
+
+function createExecutionClient(session: LocalEbaySession): EbayApiClient {
+  return new EbayApiClient(resolveEbayEnvironment(session.environment));
+}
+
+async function exchangeSelfManagedAuthorization(app: SelfManagedApp, code: string): Promise<LocalEbaySession> {
+  const client = new EbayApiClient(resolveEbayEnvironment(app.environment));
+  const tokenResponse = await client.exchangeAuthorizationCode(toAuthEnvironment(app, app.environment), code);
+  return await buildSessionFromTokenResponse(client, app.environment, tokenResponse);
+}
+
+async function refreshSelfManagedSession(app: SelfManagedApp, session: LocalEbaySession): Promise<LocalEbaySession> {
+  const client = new EbayApiClient(resolveEbayEnvironment(app.environment));
+  const tokenResponse = await client.refreshAccessToken(toAuthEnvironment(app, app.environment), session.refreshToken, DefaultScopes);
+  const refreshed = await buildSessionFromTokenResponse(client, app.environment, tokenResponse);
+  return {
+    ...refreshed,
+    defaultPaymentPolicyId: session.defaultPaymentPolicyId,
+    defaultReturnPolicyId: session.defaultReturnPolicyId,
+    defaultFulfillmentPolicyId: session.defaultFulfillmentPolicyId,
+    defaultLocationKey: session.defaultLocationKey
+  };
+}
+
+async function buildSessionFromTokenResponse(
+  client: EbayApiClient,
+  environment: string,
+  tokenResponse: Record<string, unknown>
+): Promise<LocalEbaySession> {
+  const accessToken = optionalString(tokenResponse.access_token);
+  const refreshToken = optionalString(tokenResponse.refresh_token);
+  if (!accessToken || !refreshToken) {
+    throw new AppError("AUTH_CODE_MISSING", "eBay token response did not include both access and refresh tokens.", tokenResponse);
+  }
+  const user = await client.getUser(accessToken);
+  const privileges = await client.getPrivileges(accessToken);
+  const expiresIn = typeof tokenResponse.expires_in === "number" ? tokenResponse.expires_in : Number(tokenResponse.expires_in ?? 7200);
+  const refreshExpiresIn = typeof tokenResponse.refresh_token_expires_in === "number"
+    ? tokenResponse.refresh_token_expires_in
+    : tokenResponse.refresh_token_expires_in !== undefined
+      ? Number(tokenResponse.refresh_token_expires_in)
+      : undefined;
+
+  return {
+    environment,
+    marketplaceId: "EBAY_US",
+    accessToken,
+    refreshToken,
+    accessTokenExpiresAtUtc: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    refreshTokenExpiresAtUtc: refreshExpiresIn ? new Date(Date.now() + refreshExpiresIn * 1000).toISOString() : undefined,
+    scope: optionalString(tokenResponse.scope) ?? undefined,
+    tokenType: optionalString(tokenResponse.token_type) ?? undefined,
+    ebayUserId: optionalString(user.userId) ?? undefined,
+    ebayUsername: optionalString(user.username) ?? undefined,
+    accountType: optionalString(user.accountType) ?? undefined,
+    sellerRegistrationCompleted: typeof privileges.sellerRegistrationCompleted === "boolean" ? privileges.sellerRegistrationCompleted : undefined
+  };
+}
+
+async function startSelfManagedAuthorizationListener(profile: BackendProfile): Promise<{
+  callbackUrl: string;
+  waitForResult: (timeoutMs: number) => Promise<{ code?: string; state?: string; error?: string }>;
+  close: () => Promise<void>;
+}> {
+  const app = requireSelfManagedApp(profile);
+  const acceptedUrl = app.acceptedUrl ?? "";
+  const isLocalCallback = acceptedUrl.includes("127.0.0.1") || acceptedUrl.includes("localhost");
+  if (isLocalCallback) {
+    return await startBrowserCallbackServer(DEFAULT_CALLBACK_PORT);
+  }
+
+  return {
+    callbackUrl: acceptedUrl || "manual",
+    waitForResult: async () => await promptForAuthorizationResult(),
+    close: async () => {}
+  };
+}
+
+async function promptForAuthorizationResult(): Promise<{ code?: string; state?: string; error?: string }> {
+  if (!input.isTTY || !output.isTTY) {
+    throw new AppError(
+      "AUTH_CALLBACK_TIMEOUT",
+      "Self-managed auth needs either a localhost accepted URL or an interactive terminal so the final redirect URL can be pasted."
+    );
+  }
+
+  const rl = createInterface({ input, output });
+  try {
+    const answer = (await rl.question("Paste the final redirect URL or the raw authorization code from the browser: ")).trim();
+    if (!answer) {
+      return { error: "No authorization code was provided." };
+    }
+    if (answer.startsWith("http://") || answer.startsWith("https://")) {
+      const url = new URL(answer);
+      return {
+        code: url.searchParams.get("code") ?? undefined,
+        state: url.searchParams.get("state") ?? undefined,
+        error: url.searchParams.get("error_description") ?? url.searchParams.get("error") ?? undefined
+      };
+    }
+    return { code: answer };
+  } finally {
+    rl.close();
+  }
+}
+
+function toAuthEnvironment(app: SelfManagedApp, environment: string) {
+  return {
+    name: environment as "production" | "sandbox",
+    clientId: app.clientId,
+    clientSecret: app.clientSecret,
+    runame: app.runame
+  };
 }
 
 export async function openBrowser(url: string): Promise<boolean> {

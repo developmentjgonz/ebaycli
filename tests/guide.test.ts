@@ -3,6 +3,20 @@ import { describe, expect, it } from "vitest";
 import { getGuide } from "../src/guide.js";
 
 describe("guide", () => {
+  it("describes shared and self-managed auth modes in the overview", () => {
+    const guide = getGuide("overview") as {
+      model: string;
+      authModes: {
+        shared: { default: boolean };
+        selfManaged: { default: boolean };
+      };
+    };
+
+    expect(guide.model).toBe("agent-first-local-cli");
+    expect(guide.authModes.shared.default).toBe(true);
+    expect(guide.authModes.selfManaged.default).toBe(false);
+  });
+
   it("returns machine-readable listing spec guidance", () => {
     const guide = getGuide("listing-spec") as {
       format: string;
