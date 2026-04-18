@@ -11,6 +11,7 @@ interface ListingAggregate {
   offer: JsonObject | null;
   listing: JsonObject | null;
   legacyItem: JsonObject | null;
+  location: JsonObject | null;
 }
 
 export async function getConnectionStatusDirect(client: EbayApiClient, session: LocalEbaySession) {
@@ -257,6 +258,7 @@ export async function listListingsDirect(
           soldAtUtc: null,
           buyerUsername: null,
           source: "INVENTORY",
+          writePath: "INVENTORY",
           listingUrl: null
         });
       }
@@ -273,6 +275,8 @@ export async function listListingsDirect(
 
 export async function getListingDirect(client: EbayApiClient, session: LocalEbaySession, reference: string, app?: SelfManagedApp) {
   const aggregate = await resolveAggregate(client, session, reference, app);
+  const readSource = aggregate.legacyItem ? "TRADING" : "INVENTORY";
+  const writePath = inferWritePath(aggregate);
   return {
     aggregate: {
       sku: aggregate.sku,
@@ -281,7 +285,10 @@ export async function getListingDirect(client: EbayApiClient, session: LocalEbay
       Offer: aggregate.offer,
       Listing: aggregate.listing,
       LegacyItem: aggregate.legacyItem,
-      Source: aggregate.legacyItem ? "TRADING" : "INVENTORY"
+      Location: aggregate.location,
+      Source: readSource,
+      ReadSource: readSource,
+      WritePath: writePath
     },
     spec: toListingSpec(aggregate, session.marketplaceId)
   };
@@ -294,6 +301,7 @@ export async function pullListingDirect(client: EbayApiClient, session: LocalEba
 
 export function planCreateDirect(session: LocalEbaySession, request: ListingSpecRequest): MutationPlanResponse {
   validateCreateRequest(request);
+  const writePath = request.writePath ?? "INVENTORY";
   const actions = [];
   for (const image of request.images ?? []) {
     actions.push({
@@ -302,41 +310,142 @@ export function planCreateDirect(session: LocalEbaySession, request: ListingSpec
       payload: image
     });
   }
-  actions.push({
-    type: "createInventoryItem",
-    description: `Create or replace inventory item ${request.sku}`,
-    payload: { sku: request.sku, availableQuantity: request.availableQuantity, title: request.title }
-  });
-  actions.push({
-    type: "createOffer",
-    description: `Create offer for ${request.sku}`,
-    payload: {
-      sku: request.sku,
-      marketplaceId: request.marketplaceId ?? session.marketplaceId,
-      priceValue: request.priceValue,
-      currency: request.priceCurrency ?? "USD"
-    }
-  });
-  actions.push({
-    type: "publishOffer",
-    description: `Publish offer for ${request.sku}`,
-    payload: null
-  });
+  if (writePath === "TRADING") {
+    actions.push({
+      type: "verifyAddFixedPriceItem",
+      description: `Validate Trading payload for ${request.sku}`,
+      payload: {
+        sku: request.sku,
+        marketplaceId: request.marketplaceId ?? session.marketplaceId,
+        title: request.title,
+        priceValue: request.priceValue
+      }
+    });
+    actions.push({
+      type: "addFixedPriceItem",
+      description: `Create Trading listing for ${request.sku}`,
+      payload: {
+        sku: request.sku,
+        marketplaceId: request.marketplaceId ?? session.marketplaceId,
+        title: request.title,
+        priceValue: request.priceValue
+      }
+    });
+  } else {
+    actions.push({
+      type: "createInventoryItem",
+      description: `Create or replace inventory item ${request.sku}`,
+      payload: { sku: request.sku, availableQuantity: request.availableQuantity, title: request.title }
+    });
+    actions.push({
+      type: "createOffer",
+      description: `Create offer for ${request.sku}`,
+      payload: {
+        sku: request.sku,
+        marketplaceId: request.marketplaceId ?? session.marketplaceId,
+        priceValue: request.priceValue,
+        currency: request.priceCurrency ?? "USD"
+      }
+    });
+    actions.push({
+      type: "publishOffer",
+      description: `Publish offer for ${request.sku}`,
+      payload: null
+    });
+  }
   return {
     mode: "create",
     environment: session.environment,
     storeOwnerSlug: "local",
     marketplaceId: request.marketplaceId ?? session.marketplaceId,
-    target: { sku: request.sku },
+    target: { sku: request.sku, writePath },
     actions,
     warnings: []
   };
 }
 
+export async function verifyCreateDirect(client: EbayApiClient, session: LocalEbaySession, request: ListingSpecRequest) {
+  validateCreateRequest(request);
+  const writePath = request.writePath ?? "INVENTORY";
+  if (writePath !== "TRADING") {
+    return {
+      writePath,
+      verified: false,
+      reason: "Remote create verification is currently implemented only for Trading create flows.",
+      plan: planCreateDirect(session, request)
+    };
+  }
+
+  const imageUrls = await prepareTradingImageUrls(client, session, request.images ?? []);
+  const payload = buildTradingAddPayload(session, request, imageUrls);
+  try {
+    const result = await client.verifyAddFixedPriceItem(
+      session.accessToken,
+      request.marketplaceId ?? session.marketplaceId,
+      payload
+    );
+
+    return {
+      writePath,
+      verified: true,
+      payload,
+      result
+    };
+  } catch (error) {
+    if (error instanceof AppError) {
+      return {
+        writePath,
+        verified: false,
+        payload,
+        error: {
+          code: error.code,
+          message: error.message,
+          details: error.details
+        }
+      };
+    }
+
+    throw error;
+  }
+}
+
 export async function createListingDirect(client: EbayApiClient, session: LocalEbaySession, request: ListingSpecRequest) {
   validateCreateRequest(request);
-  const uploadedImages = await uploadImages(client, session, request.images ?? []);
   const effectiveMarketplaceId = request.marketplaceId ?? session.marketplaceId;
+  const writePath = request.writePath ?? "INVENTORY";
+
+  if (writePath === "TRADING") {
+    const imageUrls = await prepareTradingImageUrls(client, session, request.images ?? []);
+    const addPayload = buildTradingAddPayload(session, request, imageUrls);
+    let verification: unknown;
+    try {
+      verification = await client.verifyAddFixedPriceItem(session.accessToken, effectiveMarketplaceId, addPayload);
+    } catch (error) {
+      if (!isWarningOnlyTradingFailure(error)) {
+        throw error;
+      }
+      verification = {
+        warningOnly: true,
+        ...(error instanceof AppError
+          ? {
+              code: error.code,
+              message: error.message,
+              details: error.details
+            }
+          : {})
+      };
+    }
+    const result = await client.addFixedPriceItem(session.accessToken, effectiveMarketplaceId, addPayload);
+    return {
+      sku: request.sku,
+      listingId: asString(result.itemId) ?? undefined,
+      source: "TRADING",
+      verification,
+      result
+    };
+  }
+
+  const uploadedImages = await uploadImages(client, session, request.images ?? []);
   const inventoryPayload = buildInventoryPayload(request, uploadedImages);
   const offerPayload = buildOfferPayload(session, request);
   await client.upsertInventoryItem(session.accessToken, request.sku, inventoryPayload, request.locale, effectiveMarketplaceId);
@@ -366,6 +475,7 @@ export async function createListingDirect(client: EbayApiClient, session: LocalE
     sku: request.sku,
     offerId,
     listingId,
+    source: "INVENTORY",
     publish
   };
 }
@@ -465,7 +575,7 @@ export async function updateListingDirect(client: EbayApiClient, session: LocalE
       ? ((aggregate.legacyItem.pictureUrls as string[] | undefined) ?? [])
       : await uploadImages(client, session, request.images);
 
-    const revisePayload = buildLegacyRevisePayload(aggregate, merged, legacyImages);
+    const revisePayload = buildLegacyRevisePayload(aggregate, merged, legacyImages, session);
     const result = await client.reviseFixedPriceItem(session.accessToken, aggregate.marketplaceId, revisePayload);
     return { sku: aggregate.sku, listingId: asString(aggregate.legacyItem.listingId), source: "TRADING", result };
   }
@@ -612,8 +722,12 @@ async function resolveAggregate(client: EbayApiClient, session: LocalEbaySession
     const offers = await client.getOffers(session.accessToken, parsed.value);
     const offer = readArray(offers, "offers")[0] ?? null;
     let listing: JsonObject | null = null;
+    let location: JsonObject | null = null;
     if (offer && asString(offer.listingId)) {
       listing = await client.getListing(session.accessToken, asString(offer.listingId)! ) as JsonObject;
+    }
+    if (offer && asString(offer.merchantLocationKey)) {
+      location = await resolveLocationForKey(client, session, asString(offer.merchantLocationKey)!);
     }
 
     if (!inventoryItem && !offer) {
@@ -625,7 +739,8 @@ async function resolveAggregate(client: EbayApiClient, session: LocalEbaySession
       inventoryItem,
       offer,
       listing,
-      legacyItem: null
+      legacyItem: null,
+      location
     };
   }
 
@@ -637,10 +752,14 @@ async function resolveAggregate(client: EbayApiClient, session: LocalEbaySession
     }
     const inventoryItem = await client.getInventoryItem(session.accessToken, sku) as JsonObject;
     let listing: JsonObject | null = null;
+    let location: JsonObject | null = null;
     if (asString(offer.listingId)) {
       listing = await client.getListing(session.accessToken, asString(offer.listingId)! ) as JsonObject;
     }
-    return { sku, marketplaceId: asString(offer.marketplaceId) ?? session.marketplaceId, inventoryItem, offer, listing, legacyItem: null };
+    if (asString(offer.merchantLocationKey)) {
+      location = await resolveLocationForKey(client, session, asString(offer.merchantLocationKey)!);
+    }
+    return { sku, marketplaceId: asString(offer.marketplaceId) ?? session.marketplaceId, inventoryItem, offer, listing, legacyItem: null, location };
   }
 
   try {
@@ -652,12 +771,15 @@ async function resolveAggregate(client: EbayApiClient, session: LocalEbaySession
     const inventoryItem = await client.getInventoryItem(session.accessToken, listingSku) as JsonObject;
     const offersBySku = await client.getOffers(session.accessToken, listingSku);
     const offer = readArray(offersBySku, "offers").find((item) => asString(item.listingId) === parsed.value) ?? readArray(offersBySku, "offers")[0] ?? null;
-    return { sku: listingSku, marketplaceId: asString(offer?.marketplaceId) ?? session.marketplaceId, inventoryItem, offer, listing: listingById, legacyItem: null };
+    const location = asString(offer?.merchantLocationKey)
+      ? await resolveLocationForKey(client, session, asString(offer?.merchantLocationKey)!)
+      : null;
+    return { sku: listingSku, marketplaceId: asString(offer?.marketplaceId) ?? session.marketplaceId, inventoryItem, offer, listing: listingById, legacyItem: null, location };
   } catch (inventoryListingError) {
     try {
       const legacyItem = await client.getLegacyListing(session.accessToken, session.marketplaceId, parsed.value) as JsonObject;
       const legacySku = asString(legacyItem.sku) ?? parsed.value;
-      return { sku: legacySku, marketplaceId: asString(legacyItem.marketplaceId) ?? session.marketplaceId, inventoryItem: null, offer: null, listing: null, legacyItem };
+      return { sku: legacySku, marketplaceId: asString(legacyItem.marketplaceId) ?? session.marketplaceId, inventoryItem: null, offer: null, listing: null, legacyItem, location: null };
     } catch (tradingGetItemError) {
       if (!app) {
         throw tradingGetItemError;
@@ -675,7 +797,7 @@ async function resolveAggregate(client: EbayApiClient, session: LocalEbaySession
           parsed.value
         ) as JsonObject;
         const legacySku = asString(legacyItem.sku) ?? parsed.value;
-        return { sku: legacySku, marketplaceId: asString(legacyItem.marketplaceId) ?? session.marketplaceId, inventoryItem: null, offer: null, listing: null, legacyItem };
+        return { sku: legacySku, marketplaceId: asString(legacyItem.marketplaceId) ?? session.marketplaceId, inventoryItem: null, offer: null, listing: null, legacyItem, location: null };
       } catch (browseError) {
         const inventoryMessage = inventoryListingError instanceof Error ? inventoryListingError.message : String(inventoryListingError);
         const tradingMessage = tradingGetItemError instanceof Error ? tradingGetItemError.message : String(tradingGetItemError);
@@ -713,6 +835,7 @@ function toListingSpec(aggregate: ListingAggregate, fallbackMarketplaceId: strin
     }
     return {
       sku: asString(aggregate.legacyItem.sku) ?? aggregate.sku,
+      writePath: "TRADING",
       marketplaceId: asString(aggregate.legacyItem.marketplaceId) ?? aggregate.marketplaceId ?? fallbackMarketplaceId,
       title: asString(aggregate.legacyItem.title) ?? "",
       description: asString(aggregate.legacyItem.description) ?? "",
@@ -725,10 +848,17 @@ function toListingSpec(aggregate: ListingAggregate, fallbackMarketplaceId: strin
       availableQuantity: readInt(aggregate.legacyItem.quantityAvailable) ?? readInt(aggregate.legacyItem.quantity) ?? 0,
       policies: undefined,
       locationKey: undefined,
+      location: asString(aggregate.legacyItem.location) ?? undefined,
+      postalCode: asString(aggregate.legacyItem.postalCode) ?? undefined,
+      country: asString(aggregate.legacyItem.country) ?? undefined,
+      dispatchTimeMax: readInt(aggregate.legacyItem.dispatchTimeMax) ?? undefined,
+      bestOfferEnabled: readLegacyBestOfferEnabled(aggregate.legacyItem.bestOfferEnabled),
+      minimumBestOfferPrice: undefined,
+      autoAcceptPrice: undefined,
       images: legacyImages,
       aspects: legacyAspects,
       packageWeightAndSize: undefined,
-      conditionDescriptors: undefined,
+      conditionDescriptors: normalizeConditionDescriptorsFromInventory(aggregate.legacyItem.conditionDescriptors),
       locale: undefined
     };
   }
@@ -745,6 +875,7 @@ function toListingSpec(aggregate: ListingAggregate, fallbackMarketplaceId: strin
 
   return {
     sku: aggregate.sku,
+    writePath: "INVENTORY",
     marketplaceId: asString(aggregate.offer?.marketplaceId) ?? aggregate.marketplaceId ?? fallbackMarketplaceId,
     title: asString(inventoryProduct?.title) ?? "",
     description: asString(inventoryProduct?.description) ?? "",
@@ -761,10 +892,17 @@ function toListingSpec(aggregate: ListingAggregate, fallbackMarketplaceId: strin
       fulfillmentPolicyId: asString(aggregate.offer?.listingPolicies ? asRecord(aggregate.offer.listingPolicies)?.fulfillmentPolicyId : undefined) ?? undefined
     },
     locationKey: asString(aggregate.offer?.merchantLocationKey) ?? undefined,
+    location: asString(asRecord(aggregate.location?.location)?.address ? formatLocation(asRecord(asRecord(aggregate.location?.location)?.address)) : undefined) ?? undefined,
+    postalCode: asString(asRecord(asRecord(aggregate.location?.location)?.address)?.postalCode) ?? undefined,
+    country: asString(asRecord(asRecord(aggregate.location?.location)?.address)?.country) ?? undefined,
+    dispatchTimeMax: undefined,
+    bestOfferEnabled: undefined,
+    minimumBestOfferPrice: undefined,
+    autoAcceptPrice: undefined,
     images,
     aspects,
     packageWeightAndSize: undefined,
-    conditionDescriptors: undefined,
+    conditionDescriptors: normalizeConditionDescriptorsFromInventory(aggregate.inventoryItem?.conditionDescriptors),
     locale: undefined
   };
 }
@@ -776,6 +914,9 @@ function merge(current: ListingSpecRequest, patch: ListingPatchRequest): Listing
     priceValue: patch.priceValue ?? current.priceValue,
     availableQuantity: patch.availableQuantity ?? current.availableQuantity,
     policies: patch.policies ?? current.policies,
+    location: patch.location ?? current.location,
+    postalCode: patch.postalCode ?? current.postalCode,
+    country: patch.country ?? current.country,
     images: patch.images ?? current.images,
     aspects: patch.aspects ?? current.aspects,
     conditionDescriptors: patch.conditionDescriptors ?? current.conditionDescriptors
@@ -791,6 +932,14 @@ function validateCreateRequest(request: ListingSpecRequest) {
   }
   if (request.availableQuantity < 0) {
     throw new AppError("VALIDATION_ERROR", "Available quantity must be zero or greater.");
+  }
+  if (request.writePath === "TRADING") {
+    if (!request.country) {
+      throw new AppError("VALIDATION_ERROR", "Trading create requests require `country`.");
+    }
+    if (!request.location && !request.postalCode) {
+      throw new AppError("VALIDATION_ERROR", "Trading create requests require either `location` or `postalCode`.");
+    }
   }
 }
 
@@ -819,6 +968,34 @@ async function uploadImages(client: EbayApiClient, session: LocalEbaySession, im
   return uploaded;
 }
 
+async function prepareTradingImageUrls(client: EbayApiClient, session: LocalEbaySession, images: NonNullable<ListingSpecRequest["images"]>) {
+  const prepared: string[] = [];
+  for (const image of images) {
+    if (image.url) {
+      prepared.push(image.url);
+      continue;
+    }
+
+    if (image.base64Content) {
+      const response = await client.createImageFromFile(
+        session.accessToken,
+        Buffer.from(image.base64Content, "base64"),
+        image.fileName ?? "image.bin",
+        image.contentType ?? "application/octet-stream"
+      );
+      const imageUrl = asString(response.imageUrl);
+      if (!imageUrl) {
+        throw new AppError("EBAY_API_ERROR", "eBay media upload did not return an imageUrl.");
+      }
+      prepared.push(imageUrl);
+      continue;
+    }
+
+    throw new AppError("VALIDATION_ERROR", "Each image must include either url or base64Content.");
+  }
+  return prepared;
+}
+
 async function recoverExistingOffer(client: EbayApiClient, session: LocalEbaySession, request: ListingSpecRequest, effectiveMarketplaceId: string) {
   const offers = await client.getOffers(session.accessToken, request.sku);
   const matching = readArray(offers, "offers").find((offer) => asString(offer.marketplaceId) === effectiveMarketplaceId);
@@ -826,6 +1003,11 @@ async function recoverExistingOffer(client: EbayApiClient, session: LocalEbaySes
     throw new AppError("EBAY_API_ERROR", `eBay reported that an offer already exists for SKU '${request.sku}', but no matching offer could be resolved.`);
   }
   return matching;
+}
+
+async function resolveLocationForKey(client: EbayApiClient, session: LocalEbaySession, merchantLocationKey: string) {
+  const locations = await client.getLocations(session.accessToken);
+  return readArray(locations, "locations").find((location) => asString(location.merchantLocationKey) === merchantLocationKey) ?? null;
 }
 
 function isAlreadyExistingOfferError(error: unknown): boolean {
@@ -867,7 +1049,7 @@ function buildOfferPayload(session: LocalEbaySession, request: ListingSpecReques
     format: request.format ?? "FIXED_PRICE",
     availableQuantity: request.availableQuantity,
     categoryId: request.categoryId,
-    merchantLocationKey: request.locationKey ?? request.policies?.fulfillmentPolicyId ?? session.defaultLocationKey,
+    merchantLocationKey: request.locationKey ?? session.defaultLocationKey,
     pricingSummary: {
       price: {
         value: request.priceValue,
@@ -887,11 +1069,118 @@ function buildOfferPayload(session: LocalEbaySession, request: ListingSpecReques
   };
 }
 
-function buildLegacyRevisePayload(aggregate: ListingAggregate, merged: ListingSpecRequest, imageUrls: string[]) {
+function buildTradingAddPayload(session: LocalEbaySession, request: ListingSpecRequest, imageUrls: string[]) {
+  const specifics = Object.entries(request.aspects ?? {}).map(([name, values]) => ({
+    Name: name,
+    Value: values
+  }));
+
+  const payload: Record<string, unknown> = {
+    Item: {
+      SKU: request.sku,
+      InventoryTrackingMethod: "SKU",
+      Title: request.title,
+      Description: request.description,
+      PrimaryCategory: {
+        CategoryID: request.categoryId
+      },
+      StartPrice: {
+        "#text": String(request.priceValue),
+        "@_currencyID": request.priceCurrency ?? "USD"
+      },
+      CategoryMappingAllowed: true,
+      Country: request.country,
+      Currency: request.priceCurrency ?? "USD",
+      DispatchTimeMax: request.dispatchTimeMax ?? 1,
+      ListingDuration: "GTC",
+      ListingType: "FixedPriceItem",
+      Quantity: request.availableQuantity,
+      ...(request.location ? { Location: request.location } : {}),
+      ...(request.postalCode ? { PostalCode: request.postalCode } : {}),
+      ...(imageUrls.length > 0 ? { PictureDetails: { PictureURL: imageUrls } } : {}),
+      ...(specifics.length > 0 ? { ItemSpecifics: { NameValueList: specifics } } : {}),
+      ...(request.condition ? { ConditionID: request.condition } : {}),
+      ...(buildTradingConditionDescriptors(request.conditionDescriptors)),
+      ...(buildTradingBusinessPolicies(session, request)),
+      ...(request.bestOfferEnabled !== undefined ? { BestOfferDetails: { BestOfferEnabled: request.bestOfferEnabled } } : {}),
+      ...(buildTradingListingDetails(request))
+    }
+  };
+
+  return payload;
+}
+
+function buildTradingBusinessPolicies(session: LocalEbaySession, request: ListingSpecRequest) {
+  const paymentPolicyId = request.policies?.paymentPolicyId ?? session.defaultPaymentPolicyId;
+  const returnPolicyId = request.policies?.returnPolicyId ?? session.defaultReturnPolicyId;
+  const fulfillmentPolicyId = request.policies?.fulfillmentPolicyId ?? session.defaultFulfillmentPolicyId;
+
+  if (!paymentPolicyId || !returnPolicyId || !fulfillmentPolicyId) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "Trading create requests require payment, return, and fulfillment policy ids either in the draft or in saved session defaults."
+    );
+  }
+
+  return {
+    SellerProfiles: {
+      SellerPaymentProfile: { PaymentProfileID: paymentPolicyId },
+      SellerReturnProfile: { ReturnProfileID: returnPolicyId },
+      SellerShippingProfile: { ShippingProfileID: fulfillmentPolicyId }
+    }
+  };
+}
+
+function buildTradingConditionDescriptors(descriptors: ListingSpecRequest["conditionDescriptors"]) {
+  if (!descriptors || descriptors.length === 0) {
+    return {};
+  }
+
+  return {
+    ConditionDescriptors: {
+      ConditionDescriptor: descriptors.map((descriptor) => ({
+        Name: descriptor.name,
+        Value: descriptor.values
+      }))
+    }
+  };
+}
+
+function buildTradingListingDetails(request: ListingSpecRequest) {
+  if (request.minimumBestOfferPrice === undefined && request.autoAcceptPrice === undefined) {
+    return {};
+  }
+
+  return {
+    ListingDetails: {
+      ...(request.minimumBestOfferPrice !== undefined
+        ? {
+            MinimumBestOfferPrice: {
+              "#text": String(request.minimumBestOfferPrice),
+              "@_currencyID": request.priceCurrency ?? "USD"
+            }
+          }
+        : {}),
+      ...(request.autoAcceptPrice !== undefined
+        ? {
+            BestOfferAutoAcceptPrice: {
+              "#text": String(request.autoAcceptPrice),
+              "@_currencyID": request.priceCurrency ?? "USD"
+            }
+          }
+        : {})
+    }
+  };
+}
+
+function buildLegacyRevisePayload(aggregate: ListingAggregate, merged: ListingSpecRequest, imageUrls: string[], session: LocalEbaySession) {
   const specifics = Object.entries(merged.aspects ?? {}).map(([name, values]) => ({
     Name: name,
     Value: values
   }));
+
+  const sellerProfiles = buildTradingBusinessPolicies(session, merged);
+  const listingDetails = buildTradingListingDetails(merged);
 
   return {
     Item: {
@@ -906,12 +1195,94 @@ function buildLegacyRevisePayload(aggregate: ListingAggregate, merged: ListingSp
         "#text": String(merged.priceValue),
         "@_currencyID": merged.priceCurrency ?? "USD"
       },
+      ...(merged.country ? { Country: merged.country } : {}),
+      ...(merged.postalCode ? { PostalCode: merged.postalCode } : {}),
+      ...(merged.location ? { Location: merged.location } : {}),
+      ...(merged.dispatchTimeMax !== undefined ? { DispatchTimeMax: merged.dispatchTimeMax } : {}),
       Quantity: merged.availableQuantity,
       ...(imageUrls.length > 0 ? { PictureDetails: { PictureURL: imageUrls } } : {}),
       ...(specifics.length > 0 ? { ItemSpecifics: { NameValueList: specifics } } : {}),
-      ...(merged.condition ? { ConditionID: merged.condition } : {})
+      ...(merged.condition ? { ConditionID: merged.condition } : {}),
+      ...(buildTradingConditionDescriptors(merged.conditionDescriptors)),
+      ...(sellerProfiles),
+      ...(merged.bestOfferEnabled !== undefined ? { BestOfferDetails: { BestOfferEnabled: merged.bestOfferEnabled } } : {}),
+      ...(listingDetails)
     }
   };
+}
+
+function inferWritePath(aggregate: ListingAggregate): "INVENTORY" | "TRADING" {
+  return aggregate.legacyItem ? "TRADING" : "INVENTORY";
+}
+
+function normalizeConditionDescriptorsFromInventory(value: unknown): ListingSpecRequest["conditionDescriptors"] {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const normalized = value
+    .map((entry) => asRecord(entry))
+    .filter((entry): entry is JsonObject => entry !== undefined)
+    .map((entry) => {
+      const name = asString(entry.name);
+      const values = arrayOfStrings(entry.values);
+      if (!name || values.length === 0) {
+        return null;
+      }
+
+      return {
+        name,
+        values
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function formatLocation(address: JsonObject | undefined): string | undefined {
+  if (!address) {
+    return undefined;
+  }
+
+  const parts = [
+    asString(address.city),
+    asString(address.stateOrProvince)
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+function readLegacyBestOfferEnabled(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+
+  return undefined;
+}
+
+function isWarningOnlyTradingFailure(error: unknown): boolean {
+  if (!(error instanceof AppError) || !isRecord(error.details)) {
+    return false;
+  }
+
+  const errors = Array.isArray(error.details.Errors)
+    ? error.details.Errors
+    : error.details.Errors !== undefined
+      ? [error.details.Errors]
+      : [];
+
+  if (errors.length === 0) {
+    return false;
+  }
+
+  return errors.every((entry) => asString(asRecord(entry)?.SeverityCode) === "Warning");
 }
 
 function inferSingleId(source: JsonObject, arrayKey: string, idKey: string): string | undefined {

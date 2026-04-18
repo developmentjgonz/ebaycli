@@ -17,7 +17,8 @@ import {
   optInLocalPolicyProgram,
   syncLocalPolicies,
   updateLocalListing,
-  updateLocalListingPlan
+  updateLocalListingPlan,
+  verifyLocalListingCreate
 } from "./backend-domain.js";
 import {
   clearLocalEbaySession,
@@ -40,6 +41,8 @@ interface GlobalOptions {
   profile: string;
   json?: boolean;
 }
+
+type WritePath = "INVENTORY" | "TRADING";
 
 function getGlobalOptions(command: Command): GlobalOptions {
   if (typeof command.optsWithGlobals === "function") {
@@ -338,12 +341,24 @@ export function createCli(): Command {
   listings
     .command("create")
     .requiredOption("--file <path>", "listing spec file")
+    .option("--write-path <path>", "INVENTORY or TRADING")
+    .option("--verify", "validate the create payload remotely without creating the listing", false)
     .option("--apply", "execute the create call instead of printing the plan", false)
     .description("Plan or create a listing")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
       const profile = requireConfiguredBackendProfile(global.profile);
-      const request = await parseListingSpecFile(options.file);
+      const request = {
+        ...(await parseListingSpecFile(options.file)),
+        ...(options.writePath ? { writePath: normalizeWritePathOption(options.writePath) } : {})
+      };
+      if (options.verify && options.apply) {
+        throw new AppError("VALIDATION_ERROR", "Use either --verify or --apply, not both.");
+      }
+      if (options.verify) {
+        renderResult(await verifyLocalListingCreate(profile, request), Boolean(global.json));
+        return;
+      }
       if (!options.apply) {
         renderMutationPlan(await createLocalListingPlan(profile, request), Boolean(global.json));
         return;
@@ -384,6 +399,15 @@ export function createCli(): Command {
     });
 
   return program;
+}
+
+function normalizeWritePathOption(value: string): WritePath {
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "INVENTORY" || normalized === "TRADING") {
+    return normalized;
+  }
+
+  throw new AppError("VALIDATION_ERROR", "--write-path must be INVENTORY or TRADING.");
 }
 
 export async function runCli(argv = process.argv): Promise<void> {

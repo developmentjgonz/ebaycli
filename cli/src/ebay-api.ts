@@ -246,7 +246,7 @@ export class EbayApiClient {
   public async getLocations(accessToken: string, signal?: AbortSignal) {
     return await this.requestJson(`${this.environment.apiBaseUrl}/sell/inventory/v1/location`, {
       method: "GET",
-      headers: authorizedHeaders(accessToken)
+      headers: inventoryHeaders(accessToken)
     }, signal);
   }
 
@@ -269,14 +269,14 @@ export class EbayApiClient {
   public async getInventoryItem(accessToken: string, sku: string, signal?: AbortSignal) {
     return await this.requestJson(`${this.environment.apiBaseUrl}/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, {
       method: "GET",
-      headers: authorizedHeaders(accessToken)
+      headers: inventoryHeaders(accessToken)
     }, signal);
   }
 
   public async getInventoryItems(accessToken: string, limit: number, offset: number, signal?: AbortSignal) {
     return await this.requestJson(`${this.environment.apiBaseUrl}/sell/inventory/v1/inventory_item?limit=${limit}&offset=${offset}`, {
       method: "GET",
-      headers: authorizedHeaders(accessToken)
+      headers: inventoryHeaders(accessToken)
     }, signal);
   }
 
@@ -294,14 +294,14 @@ export class EbayApiClient {
       : `${this.environment.apiBaseUrl}/sell/inventory/v1/offer`;
     return await this.requestJson(url, {
       method: "GET",
-      headers: authorizedHeaders(accessToken)
+      headers: inventoryHeaders(accessToken)
     }, signal);
   }
 
   public async getOffer(accessToken: string, offerId: string, signal?: AbortSignal) {
     return await this.requestJson(`${this.environment.apiBaseUrl}/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`, {
       method: "GET",
-      headers: authorizedHeaders(accessToken)
+      headers: inventoryHeaders(accessToken)
     }, signal);
   }
 
@@ -331,7 +331,7 @@ export class EbayApiClient {
   public async withdrawOffer(accessToken: string, offerId: string, signal?: AbortSignal) {
     await this.requestNoContentOrJson(`${this.environment.apiBaseUrl}/sell/inventory/v1/offer/${encodeURIComponent(offerId)}/withdraw`, {
       method: "POST",
-      headers: authorizedHeaders(accessToken)
+      headers: inventoryHeaders(accessToken)
     }, signal);
   }
 
@@ -346,7 +346,7 @@ export class EbayApiClient {
   public async getListing(accessToken: string, listingId: string, signal?: AbortSignal) {
     return await this.requestJson(`${this.environment.apiBaseUrl}/sell/inventory/v1/listing/${encodeURIComponent(listingId)}`, {
       method: "GET",
-      headers: authorizedHeaders(accessToken)
+      headers: inventoryHeaders(accessToken)
     }, signal);
   }
 
@@ -430,6 +430,38 @@ export class EbayApiClient {
       signal
     );
     return parseLegacyListing(xml, marketplaceId);
+  }
+
+  public async verifyAddFixedPriceItem(accessToken: string, marketplaceId: string, payload: unknown, signal?: AbortSignal) {
+    const xml = await this.sendTradingCall(
+      accessToken,
+      marketplaceId,
+      "VerifyAddFixedPriceItem",
+      {
+        VerifyAddFixedPriceItemRequest: {
+          "@_xmlns": "urn:ebay:apis:eBLBaseComponents",
+          ...(payload as Record<string, unknown>)
+        }
+      },
+      signal
+    );
+    return parseTradingResponseSummary(xml, "VerifyAddFixedPriceItem");
+  }
+
+  public async addFixedPriceItem(accessToken: string, marketplaceId: string, payload: unknown, signal?: AbortSignal) {
+    const xml = await this.sendTradingCall(
+      accessToken,
+      marketplaceId,
+      "AddFixedPriceItem",
+      {
+        AddFixedPriceItemRequest: {
+          "@_xmlns": "urn:ebay:apis:eBLBaseComponents",
+          ...(payload as Record<string, unknown>)
+        }
+      },
+      signal
+    );
+    return parseTradingResponseSummary(xml, "AddFixedPriceItem");
   }
 
   public async getLegacyListingBrowse(auth: EbayAuthEnvironment, marketplaceId: string, listingId: string, signal?: AbortSignal) {
@@ -530,7 +562,7 @@ export class EbayApiClient {
   }
 
   private async sendTradingCall(accessToken: string, marketplaceId: string, callName: string, payload: unknown, signal?: AbortSignal): Promise<string> {
-    const xml = tradingBuilder.build(payload);
+    const xml = `<?xml version="1.0" encoding="utf-8"?>${tradingBuilder.build(payload)}`;
     const response = await this.sendWithRetry(this.environment.tradingBaseUrl, {
       method: "POST",
       headers: {
@@ -596,6 +628,7 @@ function inventoryHeaders(accessToken: string, locale?: string, marketplaceId?: 
   const contentLanguage = locale ?? (marketplaceId ? MarketplaceLocales[marketplaceId] : undefined) ?? "en-US";
   return {
     ...authorizedJsonHeaders(accessToken),
+    "Accept-Language": contentLanguage,
     "Content-Language": contentLanguage
   };
 }
@@ -653,6 +686,7 @@ function parseTradingList(xml: string, marketplaceId: string, listName: string):
       soldAtUtc: normalizeDateTime(readString(effectiveTransaction, "CreatedDate") ?? readString(sellingStatus, "SaleTime")),
       buyerUsername: readString(buyer, "UserID"),
       source: "TRADING",
+      writePath: "TRADING",
       listingUrl: readString(listingDetails, "ViewItemURL")
     };
   });
@@ -676,6 +710,19 @@ function parseLegacyListing(xml: string, marketplaceId: string): Record<string, 
     }
     specifics[name] = arrayify(nameValue.Value).map((value) => String(value));
   }
+
+  const conditionDescriptors = arrayify(asRecord(item.ConditionDescriptors)?.ConditionDescriptor)
+    .map((entry) => asRecord(entry))
+    .filter((entry): entry is Record<string, unknown> => entry !== undefined)
+    .map((descriptor) => {
+      const name = readString(descriptor, "Name");
+      const values = arrayify(descriptor.Value).map((value) => String(value)).filter((value) => value.length > 0);
+      if (!name || values.length === 0) {
+        return null;
+      }
+      return { name, values };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
   return {
     source: "TRADING",
@@ -705,7 +752,8 @@ function parseLegacyListing(xml: string, marketplaceId: string): Record<string, 
     country: readString(item, "Country"),
     dispatchTimeMax: parseInteger(readString(item, "DispatchTimeMax")),
     pictureUrls: arrayify(asRecord(item.PictureDetails)?.PictureURL).map((value) => String(value)),
-    itemSpecifics: specifics
+    itemSpecifics: specifics,
+    conditionDescriptors: conditionDescriptors.length > 0 ? conditionDescriptors : undefined
   };
 }
 
@@ -713,13 +761,20 @@ function parseTradingResponseSummary(xml: string, callName: string): Record<stri
   const parsed = tradingParser.parse(xml) as Record<string, unknown>;
   const root = firstObjectValue(parsed);
   ensureTradingSuccess(root, callName);
+  const warnings = arrayify(root.Errors)
+    .map((entry) => asRecord(entry))
+    .filter((entry): entry is Record<string, unknown> => entry !== undefined)
+    .map((entry) => readString(entry, "LongMessage") ?? readString(entry, "ShortMessage"))
+    .filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
   return {
     callName,
     ack: readString(root, "Ack"),
     itemId: firstDescendantString(root, "ItemID"),
     sku: firstDescendantString(root, "SKU"),
     endTimeUtc: normalizeDateTime(firstDescendantString(root, "EndTime")),
-    startTimeUtc: normalizeDateTime(firstDescendantString(root, "StartTime"))
+    startTimeUtc: normalizeDateTime(firstDescendantString(root, "StartTime")),
+    fees: normalizeFees(root.Fees),
+    warnings
   };
 }
 
@@ -829,6 +884,21 @@ function firstDescendantString(root: Record<string, unknown>, key: string): stri
 function arrayify<T>(value: T | T[] | undefined | null): T[] {
   if (value === undefined || value === null) return [];
   return Array.isArray(value) ? value : [value];
+}
+
+function normalizeFees(value: unknown): Array<Record<string, unknown>> | undefined {
+  const feeArray = arrayify(asRecord(value)?.Fee)
+    .map((entry) => asRecord(entry))
+    .filter((entry): entry is Record<string, unknown> => entry !== undefined)
+    .map((fee) => ({
+      name: readString(fee, "Name"),
+      fee: parseNumber(readAmountValue(fee.Fee)),
+      currency: readAmountCurrency(fee.Fee),
+      promotionalDiscount: parseNumber(readAmountValue(fee.PromotionalDiscount)),
+      promotionalDiscountCurrency: readAmountCurrency(fee.PromotionalDiscount)
+    }));
+
+  return feeArray.length > 0 ? feeArray : undefined;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

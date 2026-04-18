@@ -102,6 +102,7 @@ export type ListingConditionDescriptorDto = z.infer<typeof listingConditionDescr
 
 export const listingSpecRequestSchema = z.object({
   sku: z.string().min(1),
+  writePath: z.enum(["INVENTORY", "TRADING"]).optional(),
   marketplaceId: z.string().optional(),
   title: z.string().min(1),
   description: z.string().min(1),
@@ -114,6 +115,13 @@ export const listingSpecRequestSchema = z.object({
   availableQuantity: z.number().int().nonnegative(),
   policies: listingPoliciesDtoSchema.optional(),
   locationKey: z.string().optional(),
+  location: z.string().optional(),
+  postalCode: z.string().optional(),
+  country: z.string().optional(),
+  dispatchTimeMax: z.number().int().nonnegative().optional(),
+  bestOfferEnabled: z.boolean().optional(),
+  minimumBestOfferPrice: z.number().nonnegative().optional(),
+  autoAcceptPrice: z.number().nonnegative().optional(),
   images: z.array(listingImageDtoSchema).optional(),
   aspects: z.record(z.string(), z.array(z.string())).optional(),
   packageWeightAndSize: z.unknown().optional(),
@@ -139,6 +147,7 @@ export const listingSummarySchema = z.object({
   soldAtUtc: z.string().nullable().optional(),
   buyerUsername: z.string().nullable().optional(),
   source: z.string().nullable().optional(),
+  writePath: z.string().nullable().optional(),
   listingUrl: z.string().nullable().optional()
 });
 export type ListingSummary = z.infer<typeof listingSummarySchema>;

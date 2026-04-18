@@ -111,6 +111,9 @@ export function renderListings(listings: ListingSummary[], asJson: boolean): voi
     if (listing.source) {
       details.push(`source=${listing.source}`);
     }
+    if (listing.writePath) {
+      details.push(`writePath=${listing.writePath}`);
+    }
     process.stdout.write(`${details.join("  ")}\n`);
   }
 }

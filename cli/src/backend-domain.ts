@@ -26,7 +26,8 @@ import {
   runDoctorDirect,
   syncPoliciesDirect,
   updateListingDirect,
-  upsertLocationDirect
+  upsertLocationDirect,
+  verifyCreateDirect
 } from "./ebay-engine.js";
 import { AppError } from "./errors.js";
 import {
@@ -262,6 +263,11 @@ export async function createLocalListing(profile: BackendProfile, request: Listi
   return await createListingDirect(createExecutionClient(session), session, request);
 }
 
+export async function verifyLocalListingCreate(profile: BackendProfile, request: ListingSpecRequest): Promise<unknown> {
+  const session = await ensureFreshLocalEbaySession(profile);
+  return await verifyCreateDirect(createExecutionClient(session), session, request);
+}
+
 export async function updateLocalListingPlan(profile: BackendProfile, reference: string, request: ListingPatchRequest): Promise<MutationPlanResponse> {
   const session = await ensureFreshLocalEbaySession(profile);
   return await planUpdateDirect(createExecutionClient(session), session, reference, request, requireSelfManagedApp(profile));
@@ -456,6 +462,7 @@ export async function openBrowser(url: string): Promise<boolean> {
 async function normalizeListingSpec(raw: JsonObject, baseDir: string): Promise<ListingSpecRequest> {
   return {
     sku: asString(raw.sku, "sku"),
+    writePath: normalizeWritePath(raw.writePath),
     marketplaceId: optionalString(raw.marketplaceId),
     title: asString(raw.title, "title"),
     description: asString(raw.description, "description"),
@@ -468,6 +475,13 @@ async function normalizeListingSpec(raw: JsonObject, baseDir: string): Promise<L
     availableQuantity: asNumber(raw.availableQuantity, "availableQuantity"),
     policies: normalizePolicies(raw.policies),
     locationKey: optionalString(raw.locationKey),
+    location: optionalString(raw.location),
+    postalCode: optionalString(raw.postalCode),
+    country: optionalString(raw.country),
+    dispatchTimeMax: optionalNumber(raw.dispatchTimeMax),
+    bestOfferEnabled: optionalBoolean(raw.bestOfferEnabled),
+    minimumBestOfferPrice: optionalNumber(raw.minimumBestOfferPrice),
+    autoAcceptPrice: optionalNumber(raw.autoAcceptPrice),
     images: await normalizeImages(raw.images, baseDir),
     aspects: normalizeAspects(raw.aspects),
     packageWeightAndSize: raw.packageWeightAndSize,
@@ -479,6 +493,7 @@ async function normalizeListingSpec(raw: JsonObject, baseDir: string): Promise<L
 async function normalizeListingPatch(raw: JsonObject, baseDir: string): Promise<ListingPatchRequest> {
   const request: ListingPatchRequest = {};
   if ("sku" in raw) request.sku = optionalString(raw.sku);
+  if ("writePath" in raw) request.writePath = normalizeWritePath(raw.writePath);
   if ("marketplaceId" in raw) request.marketplaceId = optionalString(raw.marketplaceId);
   if ("title" in raw) request.title = optionalString(raw.title);
   if ("description" in raw) request.description = optionalString(raw.description);
@@ -491,6 +506,13 @@ async function normalizeListingPatch(raw: JsonObject, baseDir: string): Promise<
   if ("availableQuantity" in raw) request.availableQuantity = asNumber(raw.availableQuantity, "availableQuantity");
   if ("policies" in raw) request.policies = normalizePolicies(raw.policies);
   if ("locationKey" in raw) request.locationKey = optionalString(raw.locationKey);
+  if ("location" in raw) request.location = optionalString(raw.location);
+  if ("postalCode" in raw) request.postalCode = optionalString(raw.postalCode);
+  if ("country" in raw) request.country = optionalString(raw.country);
+  if ("dispatchTimeMax" in raw) request.dispatchTimeMax = optionalNumber(raw.dispatchTimeMax);
+  if ("bestOfferEnabled" in raw) request.bestOfferEnabled = optionalBoolean(raw.bestOfferEnabled);
+  if ("minimumBestOfferPrice" in raw) request.minimumBestOfferPrice = optionalNumber(raw.minimumBestOfferPrice);
+  if ("autoAcceptPrice" in raw) request.autoAcceptPrice = optionalNumber(raw.autoAcceptPrice);
   if ("images" in raw) request.images = await normalizeImages(raw.images, baseDir);
   if ("aspects" in raw) request.aspects = normalizeAspects(raw.aspects);
   if ("packageWeightAndSize" in raw) request.packageWeightAndSize = raw.packageWeightAndSize;
@@ -617,6 +639,56 @@ function normalizeConditionDescriptors(value: unknown) {
       values
     };
   });
+}
+
+function normalizeWritePath(value: unknown): "INVENTORY" | "TRADING" | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "INVENTORY" || normalized === "TRADING") {
+    return normalized;
+  }
+
+  throw new AppError("VALIDATION_ERROR", "`writePath` must be either INVENTORY or TRADING.");
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  throw new AppError("VALIDATION_ERROR", "Expected a numeric value.");
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+
+  throw new AppError("VALIDATION_ERROR", "Expected a boolean value.");
 }
 
 function readPriceValue(raw: JsonObject): number {

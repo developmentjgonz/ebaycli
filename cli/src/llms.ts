@@ -45,6 +45,8 @@ The \`guide\` commands are the most authoritative interface for installed-cli be
   - Export a normalized listing spec
 - \`ebay listings create --file <draft.yaml>\`
   - Plan a listing create
+- \`ebay listings create --file <draft.yaml> --verify --json\`
+  - Validate a Trading/classic create payload without creating the listing
 - \`ebay listings update <reference> --file <patch.yaml>\`
   - Plan a listing update
 - \`ebay listings end <reference>\`
@@ -60,6 +62,7 @@ The \`guide\` commands are the most authoritative interface for installed-cli be
 
 - Trading/classic listings for active and sold reads, legacy listing detail, and legacy update/end flows
 - Inventory API listings for create flows and Inventory-backed update/end flows
+- explicit create routing through \`writePath: INVENTORY|TRADING\` for agent-controlled create intent
 - update/end dispatch automatically chooses Trading vs Inventory based on the resolved listing type
 `;
 }

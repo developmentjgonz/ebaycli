@@ -7,6 +7,7 @@ type GuideTopic =
 
 const LISTING_SPEC_EXAMPLE = {
   sku: "GENGAR-38-PLUSH-001",
+  writePath: "INVENTORY",
   title: "Pokemon Gengar Plush 38 Inch Purple Character Pillow New",
   description:
     "Large 38 inch Gengar plush pillow in new condition. Confirm exact measurements, tag details, and brand before publishing.",
@@ -161,7 +162,11 @@ function buildCapabilitiesGuide() {
       },
       {
         command: "ebay listings create --file <draft.yaml>",
-        purpose: "Plan a new Inventory-based listing create."
+        purpose: "Plan a new listing create. Use `writePath` or `--write-path` to target INVENTORY or TRADING explicitly."
+      },
+      {
+        command: "ebay listings create --file <draft.yaml> --verify",
+        purpose: "Validate a Trading create payload remotely without creating the listing."
       },
       {
         command: "ebay listings update <reference> --file <patch.yaml>",
@@ -210,6 +215,7 @@ function buildWorkflowGuide() {
       steps: [
         "Create a YAML draft matching the listing-spec guide.",
         "Run `ebay listings create --file draft.yaml` to inspect the mutation plan.",
+        "Run `ebay listings create --file draft.yaml --verify` when validating a Trading/classic create before any destructive action.",
         "Only run `ebay listings create --file draft.yaml --apply` after reviewing images, policies, category, and condition."
       ]
     },
@@ -229,6 +235,7 @@ function buildListingSpecGuide() {
     format: "YAML or JSON",
     requiredFields: ["sku", "title", "description", "categoryId", "condition", "priceValue", "availableQuantity"],
     optionalFields: [
+      "writePath",
       "marketplaceId",
       "conditionDescription",
       "conditionDescriptors",
@@ -236,6 +243,13 @@ function buildListingSpecGuide() {
       "priceCurrency",
       "policies",
       "locationKey",
+      "location",
+      "postalCode",
+      "country",
+      "dispatchTimeMax",
+      "bestOfferEnabled",
+      "minimumBestOfferPrice",
+      "autoAcceptPrice",
       "images",
       "aspects",
       "packageWeightAndSize",
@@ -248,7 +262,8 @@ function buildListingSpecGuide() {
     ],
     conditionNotes: [
       "Some categories require `conditionDescriptors` in addition to `condition`.",
-      "Example for an ungraded trading card in category `261328`: `[{ name: \"40001\", values: [\"400010\"] }]`."
+      "Example for an ungraded trading card in category `261328`: `[{ name: \"40001\", values: [\"400010\"] }]`.",
+      "If you are recreating an Inventory listing through Trading, review the target `condition` carefully. Inventory enums and Trading condition ids are not always the same shape."
     ],
     example: LISTING_SPEC_EXAMPLE
   };
@@ -267,14 +282,15 @@ function buildAgentNotesGuide() {
     ],
     dispatchModel: {
       inventory:
-        "New listing creates and Inventory-backed listings use Sell Inventory APIs and require business policies plus a merchant location.",
+        "Inventory-backed listings use Sell Inventory APIs and require business policies plus a merchant location.",
       trading:
-        "Classic eBay listings read through Trading APIs. Update and end commands dispatch to Trading automatically when the listing resolves as a classic listing."
+        "Classic eBay listings read through Trading APIs. Update and end commands dispatch to Trading automatically when the listing resolves as a classic listing. New Trading/classic creates are supported when the draft explicitly uses `writePath: TRADING`."
     },
     safetyChecks: [
       "Run `ebay setup doctor --json` before attempting create/apply on a new account.",
       "Do not assume Business Policies are available just because OAuth works.",
-      "Use plan output to confirm whether the CLI intends to use Trading or Inventory before apply."
+      "Use plan output to confirm whether the CLI intends to use Trading or Inventory before apply.",
+      "For Trading/classic creates, prefer `--verify` before ending or replacing a live listing."
     ]
   };
 }

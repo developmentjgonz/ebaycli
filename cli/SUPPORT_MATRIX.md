@@ -37,8 +37,9 @@ This file defines the intended operational support level for the public self-man
 
 | Capability | Status | Notes |
 | --- | --- | --- |
-| Create plan | Supported | Inventory-based create planning |
-| Create apply | Supported with eBay account prerequisites | Requires valid policies/location and category-specific constraints |
+| Create plan | Supported | Supports explicit `writePath` for Inventory or Trading |
+| Create verify | Supported for Trading | `ebay listings create --file draft.yaml --verify` validates classic Trading payloads remotely without creating the listing |
+| Create apply | Supported with eBay account prerequisites | Inventory and Trading create paths are implemented; success still depends on category/account constraints |
 | Update plan | Supported | Dispatches Trading vs Inventory by resolved listing type |
 | Update apply | Supported | Legacy price/quantity and legacy revise paths are implemented |
 | End plan | Supported | Dispatches Trading vs Inventory by resolved listing type |
@@ -47,6 +48,7 @@ This file defines the intended operational support level for the public self-man
 ## Known Constraints
 
 - eBay account readiness still controls real create/apply success.
+- Cross-model recreation may require model-specific field normalization. Example: Inventory condition enums may need review before Trading create.
 - Some legacy Trading detail calls are unreliable with OAuth. The CLI now uses Browse fallback for legacy listing detail instead of depending solely on Trading `GetItem`.
 - The CLI intentionally hides eBay API fragmentation behind a stable command surface, but the internal adapter layer still needs continued testing as more categories and seller configurations are exercised.
 
@@ -70,6 +72,7 @@ ebay status --json
 ebay listings list --limit 5 --json
 ebay listings get <listingId> --json
 ebay listings pull <listingId> --out review.yaml --json
+ebay listings create --file draft.yaml --verify --json
 ebay listings update <listingId> --file patch.yaml --json
 ebay listings end <listingId> --json
 ```

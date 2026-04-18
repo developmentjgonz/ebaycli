@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   beginLocalEbayAuthorization,
+  createLocalListingPlan,
   createOrSetLocalLocation,
   getLocalConnectionStatus,
   getLocalListing,
@@ -539,6 +540,65 @@ describe("local eBay session flows", () => {
           categoryId: "261328"
         })
       }));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("plans Trading create actions when the draft requests Trading write path", async () => {
+    const dir = useIsolatedConfigHome();
+
+    const profile = upsertBackendProfile({
+      name: "default",
+      selfManagedApp: {
+        environment: "production",
+        clientId: "prod-client-id",
+        clientSecret: "prod-client-secret",
+        runame: "prod-runame",
+        privacyPolicyUrl: "https://example.test/privacy",
+        acceptedUrl: "https://example.test/auth/success",
+        declinedUrl: "https://example.test/auth/declined"
+      },
+      ebaySession: {
+        environment: "production",
+        marketplaceId: "EBAY_US",
+        accessToken: "user-access-token",
+        refreshToken: "refresh-token",
+        accessTokenExpiresAtUtc: "2099-01-01T00:00:00Z",
+        defaultPaymentPolicyId: "payment-1",
+        defaultReturnPolicyId: "return-1",
+        defaultFulfillmentPolicyId: "fulfillment-1"
+      },
+      outputFormat: "json"
+    });
+
+    try {
+      const plan = await createLocalListingPlan(profile, {
+        sku: "SKU-1",
+        writePath: "TRADING",
+        marketplaceId: "EBAY_US",
+        title: "Sample listing",
+        description: "Sample description",
+        categoryId: "261328",
+        condition: "4000",
+        priceValue: 199.99,
+        priceCurrency: "USD",
+        availableQuantity: 1,
+        country: "US",
+        location: "Miami, FL",
+        postalCode: "33126",
+        policies: {
+          paymentPolicyId: "payment-1",
+          returnPolicyId: "return-1",
+          fulfillmentPolicyId: "fulfillment-1"
+        }
+      });
+
+      expect(plan.target).toEqual({ sku: "SKU-1", writePath: "TRADING" });
+      expect(plan.actions.map((action) => action.type)).toEqual([
+        "verifyAddFixedPriceItem",
+        "addFixedPriceItem"
+      ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
