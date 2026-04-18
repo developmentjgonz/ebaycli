@@ -1,93 +1,15 @@
-# ebaycli
+# ebaycli monorepo
 
-`ebaycli` is a self-managed local eBay CLI.
+This repository contains:
 
-- every user provides their own eBay app credentials
-- the CLI exchanges and refreshes user tokens directly with eBay
-- the CLI stores the eBay OAuth session locally
-- the optional `.NET` backend in this repo is a reference implementation for privacy/auth landing pages and other server-side eBay surfaces
+- `/cli`: the self-managed eBay CLI package
+- `/backend`: the optional ASP.NET reference backend
 
-## Project status
+Use these entrypoints:
 
-- Local eBay session stored in the CLI profile
-- Self-managed auth is the only public CLI mode
-- No backend user-account or store-owner model in the active product path
-- Supports both eBay listing models:
-  - Trading/classic listings for active and sold reads, legacy listing detail, and legacy update/end flows
-  - Inventory API listings for create flows and Inventory-backed update/end flows
-- Designed for human CLI use and LLM/agent use
-
-## Start here
-
-- Main human-readable docs: `/README.md`
+- CLI docs: `/cli/README.md`
+- CLI package and source: `/cli/package.json`, `/cli/src`
+- Architecture: `/docs/agent-first-architecture.md`
 - Backend docs: `/backend/EbayStoreManager.Api/README.md`
-- Testing guidance: `/TEST_STRATEGY.md`
-- Sandbox test notes: `/TESTING.md`
 
-## Commands
-
-- `node dist/index.js guide --json`
-  - Return machine-readable project guidance for agents
-- `node dist/index.js config auth --client-id ... --client-secret ... --runame ...`
-  - Configure the local CLI profile with the user's own eBay app credentials
-- `node dist/index.js auth login --environment production`
-  - Start local eBay OAuth and store the resulting session in the selected CLI profile
-- `node dist/index.js auth status --json`
-  - Show the connected eBay account
-- `node dist/index.js setup doctor --json`
-  - Show seller readiness, business policy availability, and location readiness
-- `node dist/index.js listings list --json`
-  - List active listings
-- `node dist/index.js listings list --status SOLD --days 30 --json`
-  - List recently sold listings
-- `node dist/index.js listings get <reference> --json`
-  - Fetch normalized listing detail
-- `node dist/index.js listings pull <reference> --out <file>`
-  - Export a normalized listing spec
-- `node dist/index.js listings create --file <draft.yaml>`
-  - Plan a listing create
-- `node dist/index.js listings update <reference> --file <patch.yaml>`
-  - Plan a listing update
-- `node dist/index.js listings end <reference>`
-  - Plan a listing end
-
-## Agent guidance
-
-Agents should prefer the built-in guide surface over repository inference:
-
-- `node dist/index.js guide --json`
-- `node dist/index.js guide capabilities --json`
-- `node dist/index.js guide workflows --json`
-- `node dist/index.js guide listing-spec --json`
-- `node dist/index.js guide agent-notes --json`
-
-Use those commands before drafting listing files or deciding whether a listing operation will route through Trading or Inventory APIs.
-
-## File formats
-
-- Draft listing input: YAML or JSON
-- Recommended for humans and agents: YAML
-- Command output for automation: JSON via `--json`
-
-## Key code paths
-
-- CLI entrypoint: `/src/cli.ts`
-- Agent guide surface: `/src/guide.ts`
-- CLI/backend runtime logic: `/src/backend-domain.ts`
-- Local profile persistence: `/src/backend-config.ts`
-- Optional reference backend routes: `/backend/EbayStoreManager.Api/Program.cs`
-- Local direct eBay client: `/src/ebay-api.ts`
-- Local listing/setup engine: `/src/ebay-engine.ts`
-
-## Testing
-
-Current automated coverage includes:
-
-- CLI shape and guide surface
-- listing draft normalization
-- local session refresh/default persistence
-- Trading parser/request-shape coverage
-- legacy vs Inventory dispatch coverage
-- local authorize-start route smoke
-
-See `/TEST_STRATEGY.md` for the current automated/manual split.
+The public product story is self-managed CLI first. The backend is optional reference infrastructure.

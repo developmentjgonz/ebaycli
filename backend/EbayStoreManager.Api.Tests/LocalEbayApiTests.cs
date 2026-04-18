@@ -51,7 +51,7 @@ public sealed class LocalEbayApiTests
 
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("# ebaycli", body);
-        Assert.Contains("node dist/index.js guide --json", body);
+        Assert.Contains("cd cli && node dist/index.js guide --json", body);
         Assert.Contains("Trading/classic listings", body);
     }
 

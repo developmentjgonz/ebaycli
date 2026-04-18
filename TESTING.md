@@ -26,12 +26,12 @@
 ```bash
 npm run build
 
-node dist/index.js --profile sandbox auth login --environment sandbox
-node dist/index.js --profile sandbox auth status --json
-node dist/index.js --profile sandbox setup doctor --json
-node dist/index.js --profile sandbox listings list --json
-node dist/index.js --profile sandbox listings create --file /tmp/ebay-listing-XXXXXX.json --json
-node dist/index.js --profile sandbox listings create --file /tmp/ebay-listing-XXXXXX.json --apply --json
+node cli/dist/index.js --profile sandbox auth login --environment sandbox
+node cli/dist/index.js --profile sandbox auth status --json
+node cli/dist/index.js --profile sandbox setup doctor --json
+node cli/dist/index.js --profile sandbox listings list --json
+node cli/dist/index.js --profile sandbox listings create --file /tmp/ebay-listing-XXXXXX.json --json
+node cli/dist/index.js --profile sandbox listings create --file /tmp/ebay-listing-XXXXXX.json --apply --json
 ```
 
 ## Recommended Next Step
@@ -39,5 +39,5 @@ node dist/index.js --profile sandbox listings create --file /tmp/ebay-listing-XX
 - Create or configure a seller-ready sandbox user with valid Business Policies and an inventory location, then reconnect with:
 
 ```bash
-node dist/index.js --profile sandbox auth login --environment sandbox
+node cli/dist/index.js --profile sandbox auth login --environment sandbox
 ```

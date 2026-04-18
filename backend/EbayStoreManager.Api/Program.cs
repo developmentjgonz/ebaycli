@@ -558,40 +558,40 @@ ebaycli is a self-managed local eBay CLI.
 
 ## Commands
 
-- node dist/index.js guide --json
+- cd cli && node dist/index.js guide --json
   - Return machine-readable project guidance for agents
-- node dist/index.js config auth --client-id ... --client-secret ... --runame ...
+- cd cli && node dist/index.js config auth --client-id ... --client-secret ... --runame ...
   - Configure the local CLI profile with the user's own eBay app credentials
-- node dist/index.js auth login --environment production
+- cd cli && node dist/index.js auth login --environment production
   - Start local eBay OAuth and store the resulting session in the selected CLI profile
-- node dist/index.js auth status --json
+- cd cli && node dist/index.js auth status --json
   - Show the connected eBay account
-- node dist/index.js setup doctor --json
+- cd cli && node dist/index.js setup doctor --json
   - Show seller readiness, business policy availability, and location readiness
-- node dist/index.js listings list --json
+- cd cli && node dist/index.js listings list --json
   - List active listings
-- node dist/index.js listings list --status SOLD --days 30 --json
+- cd cli && node dist/index.js listings list --status SOLD --days 30 --json
   - List recently sold listings
-- node dist/index.js listings get <reference> --json
+- cd cli && node dist/index.js listings get <reference> --json
   - Fetch normalized listing detail
-- node dist/index.js listings pull <reference> --out <file>
+- cd cli && node dist/index.js listings pull <reference> --out <file>
   - Export a normalized listing spec
-- node dist/index.js listings create --file <draft.yaml>
+- cd cli && node dist/index.js listings create --file <draft.yaml>
   - Plan a listing create
-- node dist/index.js listings update <reference> --file <patch.yaml>
+- cd cli && node dist/index.js listings update <reference> --file <patch.yaml>
   - Plan a listing update
-- node dist/index.js listings end <reference>
+- cd cli && node dist/index.js listings end <reference>
   - Plan a listing end
 
 ## Agent guidance
 
 Agents should prefer the built-in guide surface over repository inference:
 
-- node dist/index.js guide --json
-- node dist/index.js guide capabilities --json
-- node dist/index.js guide workflows --json
-- node dist/index.js guide listing-spec --json
-- node dist/index.js guide agent-notes --json
+- cd cli && node dist/index.js guide --json
+- cd cli && node dist/index.js guide capabilities --json
+- cd cli && node dist/index.js guide workflows --json
+- cd cli && node dist/index.js guide listing-spec --json
+- cd cli && node dist/index.js guide agent-notes --json
 
 Use those commands before drafting listing files or deciding whether a listing operation will route through Trading or Inventory APIs.
 """;
