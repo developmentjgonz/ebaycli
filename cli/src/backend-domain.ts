@@ -89,6 +89,18 @@ export async function beginLocalEbayAuthorization(
     );
   }
 
+  if (shouldUseBackendAuthRelay(profile, app)) {
+    return await postBackendJson<LocalEbayAuthStartResponse>(
+      profile,
+      "/api/local/ebay/authorize/start",
+      {
+        environment: request.environment,
+        callbackUrl: request.callbackUrl,
+        marketplaceId: request.marketplaceId ?? "EBAY_US"
+      }
+    );
+  }
+
   const state = randomBytes(24).toString("hex");
   return {
     authorizeUrl: buildAuthorizeUrl(toAuthEnvironment(app, app.environment), state, DefaultScopes),
@@ -104,6 +116,14 @@ export async function exchangeLocalEbayAuthorization(
   request: { state: string; code: string }
 ): Promise<LocalEbaySession> {
   const app = requireSelfManagedApp(profile);
+  if (shouldUseBackendAuthRelay(profile, app)) {
+    return await postBackendJson<LocalEbaySession>(
+      profile,
+      "/api/local/ebay/authorize/exchange",
+      request
+    );
+  }
+
   return await exchangeSelfManagedAuthorization(app, request.code);
 }
 
@@ -328,7 +348,7 @@ async function startSelfManagedAuthorizationListener(profile: BackendProfile): P
   const app = requireSelfManagedApp(profile);
   const acceptedUrl = app.acceptedUrl ?? "";
   const isLocalCallback = acceptedUrl.includes("127.0.0.1") || acceptedUrl.includes("localhost");
-  if (isLocalCallback) {
+  if (isLocalCallback || shouldUseBackendAuthRelay(profile, app)) {
     return await startBrowserCallbackServer(DEFAULT_CALLBACK_PORT);
   }
 
@@ -374,6 +394,44 @@ function toAuthEnvironment(app: SelfManagedApp, environment: string) {
     clientSecret: app.clientSecret,
     runame: app.runame
   };
+}
+
+function shouldUseBackendAuthRelay(profile: BackendProfile, app: SelfManagedApp): boolean {
+  const acceptedUrl = app.acceptedUrl ?? "";
+  const isLocalCallback = acceptedUrl.includes("127.0.0.1") || acceptedUrl.includes("localhost");
+  return Boolean(profile.backendBaseUrl) && !isLocalCallback;
+}
+
+async function postBackendJson<T>(profile: BackendProfile, path: string, payload: unknown): Promise<T> {
+  const baseUrl = profile.backendBaseUrl?.replace(/\/$/, "");
+  if (!baseUrl) {
+    throw new AppError("CONFIG_ERROR", "A backend URL is required for backend-assisted auth relay.");
+  }
+
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const contentType = response.headers.get("content-type") ?? "";
+  const body = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  if (!response.ok) {
+    const detail = typeof body === "object" && body !== null && "detail" in body && typeof body.detail === "string"
+      ? body.detail
+      : typeof body === "string" && body.length > 0
+        ? body
+        : `Backend request failed with status ${response.status}.`;
+    throw new AppError("BACKEND_ERROR", detail, body);
+  }
+
+  return body as T;
 }
 
 export async function openBrowser(url: string): Promise<boolean> {

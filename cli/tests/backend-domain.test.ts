@@ -26,6 +26,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function useIsolatedConfigHome(): string {
+  const dir = mkdtempSync(join(tmpdir(), "ebaycli-config-"));
+  process.env.XDG_CONFIG_HOME = dir;
+  return dir;
+}
+
 describe("parseListingSpecFile", () => {
   it("normalizes legacy price and local image paths into backend DTO format", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ebaycli-"));
@@ -104,6 +110,7 @@ describe("parseListingPatchFile", () => {
 
 describe("local eBay session flows", () => {
   it("builds self-managed authorization locally with the configured eBay app", async () => {
+    const dir = useIsolatedConfigHome();
     const profile = upsertBackendProfile({
       name: "self-managed",
       selfManagedApp: {
@@ -127,9 +134,68 @@ describe("local eBay session flows", () => {
     expect(result.authorizeUrl).toContain("https://auth.sandbox.ebay.com/oauth2/authorize");
     expect(result.authorizeUrl).toContain("client_id=sandbox-client-id");
     expect(result.authorizeUrl).toContain("redirect_uri=sandbox-runame");
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("uses the backend relay for authorization start when a companion backend is configured", async () => {
+    const dir = useIsolatedConfigHome();
+    const profile = upsertBackendProfile({
+      name: "self-managed-relay",
+      backendBaseUrl: "https://backend.example.test",
+      selfManagedApp: {
+        environment: "sandbox",
+        clientId: "sandbox-client-id",
+        clientSecret: "sandbox-client-secret",
+        runame: "sandbox-runame",
+        privacyPolicyUrl: "https://backend.example.test/privacy",
+        acceptedUrl: "https://backend.example.test/auth/success",
+        declinedUrl: "https://backend.example.test/auth/declined"
+      }
+    });
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://backend.example.test/api/local/ebay/authorize/start");
+      expect(init?.method).toBe("POST");
+      expect(init?.headers).toMatchObject({
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      });
+      expect(JSON.parse(String(init?.body))).toEqual({
+        environment: "sandbox",
+        callbackUrl: "http://127.0.0.1:8765/callback",
+        marketplaceId: "EBAY_US"
+      });
+
+      return new Response(
+        JSON.stringify({
+          authorizeUrl: "https://auth.sandbox.ebay.com/oauth2/authorize?client_id=backend-client-id",
+          state: "backend-state",
+          environment: "sandbox",
+          marketplaceId: "EBAY_US",
+          expiresAtUtc: "2099-01-01T00:00:00Z"
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await beginLocalEbayAuthorization(profile, {
+      environment: "sandbox",
+      callbackUrl: "http://127.0.0.1:8765/callback",
+      marketplaceId: "EBAY_US"
+    });
+
+    expect(result.authorizeUrl).toContain("client_id=backend-client-id");
+    expect(result.state).toBe("backend-state");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it("rejects self-managed authorization when the requested environment does not match the configured app", async () => {
+    const dir = useIsolatedConfigHome();
     const profile = upsertBackendProfile({
       name: "self-managed-mismatch",
       selfManagedApp: {
@@ -150,11 +216,12 @@ describe("local eBay session flows", () => {
         marketplaceId: "EBAY_US"
       })
     ).rejects.toThrow(/configured for production auth/i);
+
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it("refreshes expired local sessions and persists the new tokens before calling status", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebaycli-config-"));
-    process.env.XDG_CONFIG_HOME = dir;
+    const dir = useIsolatedConfigHome();
 
     const expiredSession = {
       environment: "sandbox",
@@ -237,8 +304,7 @@ describe("local eBay session flows", () => {
   });
 
   it("persists local policy defaults and location defaults from direct eBay responses", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebaycli-config-"));
-    process.env.XDG_CONFIG_HOME = dir;
+    const dir = useIsolatedConfigHome();
 
     const profile = upsertBackendProfile({
       name: "default",
@@ -318,8 +384,7 @@ describe("local eBay session flows", () => {
   });
 
   it("sends listing list filters for sold lookback through Trading", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "ebaycli-config-"));
-    process.env.XDG_CONFIG_HOME = dir;
+    const dir = useIsolatedConfigHome();
 
     const profile = upsertBackendProfile({
       name: "default",

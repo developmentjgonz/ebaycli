@@ -660,8 +660,19 @@ function parseTradingResponseSummary(xml: string, callName: string): Record<stri
 }
 
 function firstObjectValue(root: Record<string, unknown>): Record<string, unknown> {
-  const value = Object.values(root)[0];
-  return asRecord(value) ?? root;
+  for (const [key, value] of Object.entries(root)) {
+    if (key.startsWith("?")) {
+      continue;
+    }
+
+    const record = asRecord(value);
+    if (record) {
+      return record;
+    }
+  }
+
+  const firstRecord = Object.values(root).map((value) => asRecord(value)).find((value) => value !== undefined);
+  return firstRecord ?? root;
 }
 
 function firstDescendantString(root: Record<string, unknown>, key: string): string | undefined {
