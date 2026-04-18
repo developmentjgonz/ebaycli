@@ -1,5 +1,5 @@
 import { AppError } from "./errors.js";
-import { type DoctorReportResponse, type ListingPatchRequest, type ListingSpecRequest, type ListingSummary, type LocalEbaySession, type MutationPlanResponse } from "./backend-types.js";
+import { type DoctorReportResponse, type ListingPatchRequest, type ListingSpecRequest, type ListingSummary, type LocalEbaySession, type MutationPlanResponse, type SelfManagedApp } from "./backend-types.js";
 import { EbayApiClient } from "./ebay-api.js";
 
 type JsonObject = Record<string, unknown>;
@@ -271,8 +271,8 @@ export async function listListingsDirect(
   return results;
 }
 
-export async function getListingDirect(client: EbayApiClient, session: LocalEbaySession, reference: string) {
-  const aggregate = await resolveAggregate(client, session, reference);
+export async function getListingDirect(client: EbayApiClient, session: LocalEbaySession, reference: string, app?: SelfManagedApp) {
+  const aggregate = await resolveAggregate(client, session, reference, app);
   return {
     aggregate: {
       sku: aggregate.sku,
@@ -287,8 +287,8 @@ export async function getListingDirect(client: EbayApiClient, session: LocalEbay
   };
 }
 
-export async function pullListingDirect(client: EbayApiClient, session: LocalEbaySession, reference: string) {
-  const result = await getListingDirect(client, session, reference);
+export async function pullListingDirect(client: EbayApiClient, session: LocalEbaySession, reference: string, app?: SelfManagedApp) {
+  const result = await getListingDirect(client, session, reference, app);
   return result.spec;
 }
 
@@ -370,8 +370,8 @@ export async function createListingDirect(client: EbayApiClient, session: LocalE
   };
 }
 
-export async function planUpdateDirect(client: EbayApiClient, session: LocalEbaySession, reference: string, request: ListingPatchRequest): Promise<MutationPlanResponse> {
-  const aggregate = await resolveAggregate(client, session, reference);
+export async function planUpdateDirect(client: EbayApiClient, session: LocalEbaySession, reference: string, request: ListingPatchRequest, app?: SelfManagedApp): Promise<MutationPlanResponse> {
+  const aggregate = await resolveAggregate(client, session, reference, app);
   const current = toListingSpec(aggregate, session.marketplaceId);
   const merged = merge(current, request);
   const actions = [];
@@ -441,8 +441,8 @@ export async function planUpdateDirect(client: EbayApiClient, session: LocalEbay
   };
 }
 
-export async function updateListingDirect(client: EbayApiClient, session: LocalEbaySession, reference: string, request: ListingPatchRequest) {
-  const aggregate = await resolveAggregate(client, session, reference);
+export async function updateListingDirect(client: EbayApiClient, session: LocalEbaySession, reference: string, request: ListingPatchRequest, app?: SelfManagedApp) {
+  const aggregate = await resolveAggregate(client, session, reference, app);
   const current = toListingSpec(aggregate, session.marketplaceId);
   const merged = merge(current, request);
   validateCreateRequest(merged);
@@ -507,8 +507,8 @@ export async function updateListingDirect(client: EbayApiClient, session: LocalE
   return { sku: aggregate.sku, offerId, updated: true };
 }
 
-export async function planEndDirect(client: EbayApiClient, session: LocalEbaySession, reference: string): Promise<MutationPlanResponse> {
-  const aggregate = await resolveAggregate(client, session, reference);
+export async function planEndDirect(client: EbayApiClient, session: LocalEbaySession, reference: string, app?: SelfManagedApp): Promise<MutationPlanResponse> {
+  const aggregate = await resolveAggregate(client, session, reference, app);
   if (aggregate.legacyItem) {
     return {
       mode: "end",
@@ -540,8 +540,8 @@ export async function planEndDirect(client: EbayApiClient, session: LocalEbaySes
   };
 }
 
-export async function endListingDirect(client: EbayApiClient, session: LocalEbaySession, reference: string) {
-  const aggregate = await resolveAggregate(client, session, reference);
+export async function endListingDirect(client: EbayApiClient, session: LocalEbaySession, reference: string, app?: SelfManagedApp) {
+  const aggregate = await resolveAggregate(client, session, reference, app);
   if (aggregate.legacyItem) {
     const result = await client.endFixedPriceItem(
       session.accessToken,
@@ -600,7 +600,7 @@ function buildDoctorFailureCheck(name: string, message: string, error: unknown) 
   };
 }
 
-async function resolveAggregate(client: EbayApiClient, session: LocalEbaySession, reference: string): Promise<ListingAggregate> {
+async function resolveAggregate(client: EbayApiClient, session: LocalEbaySession, reference: string, app?: SelfManagedApp): Promise<ListingAggregate> {
   const parsed = parseReference(reference);
   if (parsed.kind === "sku") {
     let inventoryItem: JsonObject | null = null;
@@ -653,10 +653,44 @@ async function resolveAggregate(client: EbayApiClient, session: LocalEbaySession
     const offersBySku = await client.getOffers(session.accessToken, listingSku);
     const offer = readArray(offersBySku, "offers").find((item) => asString(item.listingId) === parsed.value) ?? readArray(offersBySku, "offers")[0] ?? null;
     return { sku: listingSku, marketplaceId: asString(offer?.marketplaceId) ?? session.marketplaceId, inventoryItem, offer, listing: listingById, legacyItem: null };
-  } catch {
-    const legacyItem = await client.getLegacyListing(session.accessToken, session.marketplaceId, parsed.value) as JsonObject;
-    const legacySku = asString(legacyItem.sku) ?? parsed.value;
-    return { sku: legacySku, marketplaceId: asString(legacyItem.marketplaceId) ?? session.marketplaceId, inventoryItem: null, offer: null, listing: null, legacyItem };
+  } catch (inventoryListingError) {
+    try {
+      const legacyItem = await client.getLegacyListing(session.accessToken, session.marketplaceId, parsed.value) as JsonObject;
+      const legacySku = asString(legacyItem.sku) ?? parsed.value;
+      return { sku: legacySku, marketplaceId: asString(legacyItem.marketplaceId) ?? session.marketplaceId, inventoryItem: null, offer: null, listing: null, legacyItem };
+    } catch (tradingGetItemError) {
+      if (!app) {
+        throw tradingGetItemError;
+      }
+
+      try {
+        const legacyItem = await client.getLegacyListingBrowse(
+          {
+            name: app.environment,
+            clientId: app.clientId,
+            clientSecret: app.clientSecret,
+            runame: app.runame
+          },
+          session.marketplaceId,
+          parsed.value
+        ) as JsonObject;
+        const legacySku = asString(legacyItem.sku) ?? parsed.value;
+        return { sku: legacySku, marketplaceId: asString(legacyItem.marketplaceId) ?? session.marketplaceId, inventoryItem: null, offer: null, listing: null, legacyItem };
+      } catch (browseError) {
+        const inventoryMessage = inventoryListingError instanceof Error ? inventoryListingError.message : String(inventoryListingError);
+        const tradingMessage = tradingGetItemError instanceof Error ? tradingGetItemError.message : String(tradingGetItemError);
+        const browseMessage = browseError instanceof Error ? browseError.message : String(browseError);
+        throw new AppError(
+          "EBAY_API_ERROR",
+          `Could not resolve listing '${parsed.value}' through Inventory, Trading GetItem, or Browse fallback.`,
+          {
+            inventoryListingError: inventoryMessage,
+            tradingGetItemError: tradingMessage,
+            browseError: browseMessage
+          }
+        );
+      }
+    }
   }
 }
 

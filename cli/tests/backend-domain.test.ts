@@ -8,6 +8,7 @@ import {
   beginLocalEbayAuthorization,
   createOrSetLocalLocation,
   getLocalConnectionStatus,
+  getLocalListing,
   listLocalListings,
   parseListingPatchFile,
   parseListingSpecFile,
@@ -434,6 +435,110 @@ describe("local eBay session flows", () => {
     try {
       const listings = await listLocalListings(profile, { status: "SOLD", page: 2, limit: 50, days: 30 });
       expect(listings).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to Browse detail when Trading GetItem fails for a legacy listing", async () => {
+    const dir = useIsolatedConfigHome();
+
+    const profile = upsertBackendProfile({
+      name: "default",
+      selfManagedApp: {
+        environment: "production",
+        clientId: "prod-client-id",
+        clientSecret: "prod-client-secret",
+        runame: "prod-runame",
+        privacyPolicyUrl: "https://example.test/privacy",
+        acceptedUrl: "https://example.test/auth/success",
+        declinedUrl: "https://example.test/auth/declined"
+      },
+      ebaySession: {
+        environment: "production",
+        marketplaceId: "EBAY_US",
+        accessToken: "user-access-token",
+        refreshToken: "refresh-token",
+        accessTokenExpiresAtUtc: "2099-01-01T00:00:00Z"
+      },
+      outputFormat: "json"
+    });
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://api.ebay.com/sell/inventory/v1/listing/276784478357") {
+        return new Response(
+          JSON.stringify({ errors: [{ message: "Not found" }] }),
+          { status: 404, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url === "https://api.ebay.com/ws/api.dll") {
+        expect((init?.headers as Record<string, string> | undefined)?.["X-EBAY-API-CALL-NAME"]).toBe("GetItem");
+        return new Response(
+          [
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+            "<GetItemResponse xmlns=\"urn:ebay:apis:eBLBaseComponents\">",
+            "<Ack>Failure</Ack>",
+            "<Errors>",
+            "<ShortMessage>XML Parse error.</ShortMessage>",
+            "<LongMessage>XML Parse error.</LongMessage>",
+            "</Errors>",
+            "</GetItemResponse>"
+          ].join(""),
+          { status: 200, headers: { "content-type": "text/xml" } }
+        );
+      }
+
+      if (url === "https://api.ebay.com/identity/v1/oauth2/token") {
+        return new Response(
+          JSON.stringify({
+            access_token: "app-access-token",
+            expires_in: 7200,
+            token_type: "Application Access Token"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url === "https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id?legacy_item_id=276784478357") {
+        expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe("Bearer app-access-token");
+        return new Response(
+          JSON.stringify({
+            title: "Browse fallback listing",
+            shortDescription: "Recovered through Browse",
+            price: { value: "250.00", currency: "USD" },
+            categoryIdPath: "1|2|261328",
+            conditionId: "4000",
+            condition: "Ungraded",
+            image: { imageUrl: "https://example.test/image-1.jpg" },
+            itemCreationDate: "2024-12-19T02:44:12.000Z",
+            estimatedAvailabilities: [{ estimatedAvailabilityStatus: "IN_STOCK", estimatedRemainingQuantity: 1, estimatedSoldQuantity: 0 }]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const listing = await getLocalListing(profile, "276784478357");
+      expect(listing).toEqual(expect.objectContaining({
+        aggregate: expect.objectContaining({
+          Source: "TRADING",
+          LegacyItem: expect.objectContaining({
+            detailSource: "BROWSE",
+            title: "Browse fallback listing"
+          })
+        }),
+        spec: expect.objectContaining({
+          title: "Browse fallback listing",
+          description: "Recovered through Browse",
+          categoryId: "261328"
+        })
+      }));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

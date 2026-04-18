@@ -27,6 +27,8 @@ The \`guide\` commands are the most authoritative interface for installed-cli be
   - Configure the local CLI profile with the user's own eBay app credentials
 - \`ebay auth login --environment production\`
   - Start local eBay OAuth and store the resulting session in the selected CLI profile
+- \`ebay status --json\`
+  - Return a combined profile/config/auth/doctor snapshot for agent readiness checks
 - \`ebay auth status --json\`
   - Show the connected eBay account
 - \`ebay auth disconnect --json\`

@@ -53,17 +53,26 @@ function getGlobalOptions(command: Command): GlobalOptions {
   return ((command.opts() as Partial<GlobalOptions>) ?? { profile: "default", json: false }) as GlobalOptions;
 }
 
-function redactProfile(profile: ReturnType<typeof resolveBackendProfile>) {
-  if (!profile.selfManagedApp) {
-    return profile;
-  }
-
+export function redactProfileForOutput(profile: ReturnType<typeof resolveBackendProfile>) {
   return {
     ...profile,
-    selfManagedApp: {
-      ...profile.selfManagedApp,
-      clientSecret: "***redacted***"
-    }
+    ...(profile.selfManagedApp
+      ? {
+          selfManagedApp: {
+            ...profile.selfManagedApp,
+            clientSecret: "***redacted***"
+          }
+        }
+      : {}),
+    ...(profile.ebaySession
+      ? {
+          ebaySession: {
+            ...profile.ebaySession,
+            accessToken: "***redacted***",
+            refreshToken: "***redacted***"
+          }
+        }
+      : {})
   };
 }
 
@@ -91,6 +100,27 @@ export function createCli(): Command {
       const global = getGlobalOptions(command);
       const content = buildCliLlmsText();
       renderResult(global.json ? { format: "llms.txt", content } : content, Boolean(global.json));
+    });
+
+  program
+    .command("status")
+    .description("Return a combined operational status snapshot for the selected profile")
+    .action(async (_, command: Command) => {
+      const global = getGlobalOptions(command);
+      const profile = requireConfiguredBackendProfile(global.profile);
+      const [connection, doctor] = await Promise.all([
+        getLocalConnectionStatus(profile),
+        runLocalDoctor(profile)
+      ]);
+      renderResult(
+        {
+          profile: global.profile,
+          configuration: redactProfileForOutput(profile),
+          connection,
+          doctor
+        },
+        Boolean(global.json)
+      );
     });
 
   const config = program.command("config").description("Configure this CLI profile and optional companion backend/site URLs");
@@ -133,7 +163,7 @@ export function createCli(): Command {
           ...(options.declinedUrl ? { declinedUrl: options.declinedUrl } : authSiteBaseUrl ? { declinedUrl: `${authSiteBaseUrl}/auth/declined` } : {})
         }
       });
-      renderResult(redactProfile(profile), Boolean(global.json));
+      renderResult(redactProfileForOutput(profile), Boolean(global.json));
     });
 
   config
@@ -141,7 +171,7 @@ export function createCli(): Command {
     .description("Show profile configuration for this CLI profile")
     .action(async (_, command: Command) => {
       const global = getGlobalOptions(command);
-      renderResult(redactProfile(resolveBackendProfile(global.profile)), Boolean(global.json));
+      renderResult(redactProfileForOutput(resolveBackendProfile(global.profile)), Boolean(global.json));
     });
 
   const auth = program.command("auth").description("Connect eBay locally and inspect the current local session");

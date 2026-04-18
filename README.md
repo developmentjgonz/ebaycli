@@ -2,8 +2,8 @@
 
 This repository is split into two primary parts:
 
-- [cli](/Users/admin/Projects/ebaycli/cli): the self-managed npm CLI package
-- [backend](/Users/admin/Projects/ebaycli/backend): the optional ASP.NET reference backend
+- [cli](cli): the self-managed npm CLI package
+- [backend](backend): the optional ASP.NET reference backend
 
 Public product posture:
 
@@ -13,8 +13,8 @@ Public product posture:
 
 Start here:
 
-- CLI usage and publish details: [cli/README.md](/Users/admin/Projects/ebaycli/cli/README.md)
-- Architecture: [docs/agent-first-architecture.md](/Users/admin/Projects/ebaycli/docs/agent-first-architecture.md)
-- Backend reference setup: [backend/EbayStoreManager.Api/README.md](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api/README.md)
-- Backend solution: [backend/EbayStoreManager.sln](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.sln)
-- Testing notes: [TEST_STRATEGY.md](/Users/admin/Projects/ebaycli/TEST_STRATEGY.md), [TESTING.md](/Users/admin/Projects/ebaycli/TESTING.md)
+- CLI usage and publish details: [cli/README.md](cli/README.md)
+- Architecture: [docs/agent-first-architecture.md](docs/agent-first-architecture.md)
+- Backend reference setup: [backend/EbayStoreManager.Api/README.md](backend/EbayStoreManager.Api/README.md)
+- Backend solution: [backend/EbayStoreManager.sln](backend/EbayStoreManager.sln)
+- Testing notes: [TEST_STRATEGY.md](TEST_STRATEGY.md), [TESTING.md](TESTING.md)

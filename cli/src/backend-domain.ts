@@ -242,12 +242,12 @@ export async function listLocalListings(
 
 export async function getLocalListing(profile: BackendProfile, reference: string): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await getListingDirect(createExecutionClient(session), session, reference);
+  return await getListingDirect(createExecutionClient(session), session, reference, requireSelfManagedApp(profile));
 }
 
 export async function pullLocalListing(profile: BackendProfile, reference: string, outputPath: string): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  const spec = await pullListingDirect(createExecutionClient(session), session, reference);
+  const spec = await pullListingDirect(createExecutionClient(session), session, reference, requireSelfManagedApp(profile));
   writeDataFile(outputPath, spec);
   return spec;
 }
@@ -264,22 +264,22 @@ export async function createLocalListing(profile: BackendProfile, request: Listi
 
 export async function updateLocalListingPlan(profile: BackendProfile, reference: string, request: ListingPatchRequest): Promise<MutationPlanResponse> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await planUpdateDirect(createExecutionClient(session), session, reference, request);
+  return await planUpdateDirect(createExecutionClient(session), session, reference, request, requireSelfManagedApp(profile));
 }
 
 export async function updateLocalListing(profile: BackendProfile, reference: string, request: ListingPatchRequest): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await updateListingDirect(createExecutionClient(session), session, reference, request);
+  return await updateListingDirect(createExecutionClient(session), session, reference, request, requireSelfManagedApp(profile));
 }
 
 export async function endLocalListingPlan(profile: BackendProfile, reference: string): Promise<MutationPlanResponse> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await planEndDirect(createExecutionClient(session), session, reference);
+  return await planEndDirect(createExecutionClient(session), session, reference, requireSelfManagedApp(profile));
 }
 
 export async function endLocalListing(profile: BackendProfile, reference: string): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await endListingDirect(createExecutionClient(session), session, reference);
+  return await endListingDirect(createExecutionClient(session), session, reference, requireSelfManagedApp(profile));
 }
 
 function createExecutionClient(session: LocalEbaySession): EbayApiClient {

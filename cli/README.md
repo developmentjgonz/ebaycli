@@ -9,7 +9,7 @@
 
 ## CLI quick start
 
-From [/Users/admin/Projects/ebaycli/cli](/Users/admin/Projects/ebaycli/cli):
+From `cli/`:
 
 ```bash
 npm install
@@ -21,6 +21,7 @@ node dist/index.js config auth \
   --client-secret YOUR_CLIENT_SECRET \
   --runame YOUR_RUNAME
 node dist/index.js auth login --environment sandbox
+node dist/index.js status --json
 node dist/index.js auth status --json
 node dist/index.js auth disconnect --json
 node dist/index.js setup doctor --json
@@ -37,6 +38,7 @@ ebay config auth \
   --client-secret YOUR_CLIENT_SECRET \
   --runame YOUR_RUNAME
 ebay auth login --environment production
+ebay status --json
 ```
 
 Once connected, the normal workflow is:
@@ -64,6 +66,18 @@ node dist/index.js guide agent-notes --json
 
 Use that output before generating listing drafts or choosing write operations.
 
+For a single operational snapshot, use:
+
+```bash
+node dist/index.js status --json
+```
+
+That returns:
+
+- redacted profile configuration
+- current auth/session status
+- current seller-readiness doctor results
+
 For static runtime metadata, the CLI also exposes:
 
 ```bash
@@ -71,11 +85,11 @@ node dist/index.js llms
 node dist/index.js llms --json
 ```
 
-The repository also ships a root [llms.txt](/Users/admin/Projects/ebaycli/llms.txt) file for monorepo discovery, and this package ships its own [llms.txt](/Users/admin/Projects/ebaycli/cli/llms.txt) for CLI/package discovery.
+The repository also ships a root [llms.txt](../llms.txt) file for monorepo discovery, and this package ships its own [llms.txt](llms.txt) for CLI/package discovery.
 
 ## Design docs
 
-- [docs/agent-first-architecture.md](/Users/admin/Projects/ebaycli/docs/agent-first-architecture.md) describes the self-managed public architecture and the role of the optional reference backend.
+- [docs/agent-first-architecture.md](../docs/agent-first-architecture.md) describes the self-managed public architecture and the role of the optional reference backend.
 
 ## Listing model support
 
@@ -84,6 +98,8 @@ The CLI supports both eBay listing models:
 - classic Trading listings for active/sold reads and legacy listing detail
 - Inventory API listings for create flows and Inventory-backed listings
 - automatic Trading vs Inventory dispatch for update/end based on the resolved listing type
+
+The current support matrix is documented in [SUPPORT_MATRIX.md](SUPPORT_MATRIX.md).
 
 ## Public service surfaces
 
@@ -131,7 +147,7 @@ To remove access cleanly:
 
 ## Backend
 
-The backend lives in [/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api). In the public architecture it is an optional reference implementation for:
+The backend lives in [../backend/EbayStoreManager.Api](../backend/EbayStoreManager.Api). In the public architecture it is an optional reference implementation for:
 
 - hosting privacy/auth landing pages
 - optional server-side token exchange/refresh flows
@@ -139,4 +155,4 @@ The backend lives in [/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api
 
 The CLI does not require this backend for the default self-managed path. Advanced users can self-host it or use it as an implementation reference.
 
-For backend setup and endpoints, see [backend/EbayStoreManager.Api/README.md](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api/README.md).
+For backend setup and endpoints, see [backend/EbayStoreManager.Api/README.md](../backend/EbayStoreManager.Api/README.md).

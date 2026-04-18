@@ -87,4 +87,75 @@ describe("EbayApiClient trading responses", () => {
     }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("parses legacy listing detail through Browse fallback", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/identity/v1/oauth2/token")) {
+        expect(String(init?.body)).toContain("grant_type=client_credentials");
+        return new Response(
+          JSON.stringify({
+            access_token: "app-access-token",
+            expires_in: 7200,
+            token_type: "Application Access Token"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      expect(url).toContain("/buy/browse/v1/item/get_item_by_legacy_id?legacy_item_id=276784478357");
+      expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe("Bearer app-access-token");
+      expect((init?.headers as Record<string, string> | undefined)?.["X-EBAY-C-MARKETPLACE-ID"]).toBe("EBAY_US");
+      return new Response(
+        JSON.stringify({
+          title: "Sample listing",
+          shortDescription: "Sample browse description",
+          price: { value: "250.00", currency: "USD" },
+          categoryPath: "A|B|Trading Card Singles",
+          categoryIdPath: "1|2|261328",
+          condition: "Ungraded",
+          conditionId: "4000",
+          itemLocation: { city: "Miami", stateOrProvince: "FL", postalCode: "33155", country: "US" },
+          image: { imageUrl: "https://example.test/image-1.jpg" },
+          additionalImages: [{ imageUrl: "https://example.test/image-2.jpg" }],
+          itemCreationDate: "2024-12-19T02:44:12.000Z",
+          estimatedAvailabilities: [{ estimatedAvailabilityStatus: "IN_STOCK", estimatedRemainingQuantity: 1, estimatedSoldQuantity: 0 }],
+          localizedAspects: [{ name: "Player/Athlete", value: "Kevin Durant" }]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new EbayApiClient(resolveEbayEnvironment("production"));
+    const listing = await client.getLegacyListingBrowse(
+      {
+        name: "production",
+        clientId: "client-id",
+        clientSecret: "client-secret",
+        runame: "runame"
+      },
+      "EBAY_US",
+      "276784478357"
+    );
+
+    expect(listing).toEqual(expect.objectContaining({
+      source: "TRADING",
+      detailSource: "BROWSE",
+      listingId: "276784478357",
+      title: "Sample listing",
+      description: "Sample browse description",
+      categoryId: "261328",
+      conditionId: "4000",
+      priceCurrency: "USD"
+    }));
+    expect(listing.pictureUrls).toEqual([
+      "https://example.test/image-1.jpg",
+      "https://example.test/image-2.jpg"
+    ]);
+    expect(listing.itemSpecifics).toEqual({
+      "Player/Athlete": ["Kevin Durant"]
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

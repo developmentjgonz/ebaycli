@@ -12,7 +12,7 @@ The public CLI path is self-managed and stores the eBay session locally. This ba
 
 ## Local run
 
-From [/Users/admin/Projects/ebaycli/backend](/Users/admin/Projects/ebaycli/backend):
+From `backend/`:
 
 ```bash
 dotnet build EbayStoreManager.sln
@@ -20,7 +20,7 @@ dotnet test EbayStoreManager.sln
 dotnet run --project EbayStoreManager.Api
 ```
 
-Default local URLs come from [launchSettings.json](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api/Properties/launchSettings.json):
+Default local URLs come from [launchSettings.json](Properties/launchSettings.json):
 
 - `http://localhost:5141`
 - `https://localhost:7217`
@@ -77,7 +77,7 @@ Those values were unused by the runtime and were removed to keep the production 
 Use `dotnet user-secrets` for local eBay credentials:
 
 ```bash
-cd /Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api
+cd backend/EbayStoreManager.Api
 
 dotnet user-secrets set "Ebay:Sandbox:ClientId" "..."
 dotnet user-secrets set "Ebay:Sandbox:ClientSecret" "..."
@@ -109,14 +109,14 @@ For SQL Server:
 export ConnectionStrings__SqlServer="Server=tcp:...;Database=...;User ID=...;Password=...;Encrypt=True;"
 ```
 
-If `ConnectionStrings__SqlServer` is not set, the app falls back to local SQLite from [appsettings.json](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api/appsettings.json).
+If `ConnectionStrings__SqlServer` is not set, the app falls back to local SQLite from [appsettings.json](appsettings.json).
 
 ## Local smoke test
 
 Without any eBay secrets configured, the app should still boot and serve its public surfaces:
 
 ```bash
-cd /Users/admin/Projects/ebaycli/backend
+cd backend
 dotnet run --project EbayStoreManager.Api
 ```
 

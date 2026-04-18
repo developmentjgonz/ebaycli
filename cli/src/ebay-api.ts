@@ -92,6 +92,14 @@ export function buildAuthorizeUrl(config: EbayAuthEnvironment, state: string, sc
 }
 
 export class EbayApiClient {
+  private cachedApplicationAccessToken:
+    | {
+        key: string;
+        accessToken: string;
+        expiresAtMs: number;
+      }
+    | null = null;
+
   public constructor(private readonly environment: EbayEnvironmentDescriptor) {}
 
   public async exchangeAuthorizationCode(
@@ -127,6 +135,45 @@ export class EbayApiClient {
       basicAuth(auth.clientId, auth.clientSecret),
       signal
     );
+  }
+
+  public async getApplicationAccessToken(
+    auth: EbayAuthEnvironment,
+    scopes = ["https://api.ebay.com/oauth/api_scope"],
+    signal?: AbortSignal
+  ): Promise<string> {
+    const key = `${auth.clientId}:${this.environment.name}:${scopes.join(" ")}`;
+    const cached = this.cachedApplicationAccessToken;
+    if (cached && cached.key === key && cached.expiresAtMs > Date.now() + 60_000) {
+      return cached.accessToken;
+    }
+
+    const tokenResponse = await this.postForm(
+      `${this.environment.apiBaseUrl}/identity/v1/oauth2/token`,
+      {
+        grant_type: "client_credentials",
+        scope: scopes.join(" ")
+      },
+      basicAuth(auth.clientId, auth.clientSecret),
+      signal
+    );
+
+    const accessToken = optionalString(tokenResponse.access_token);
+    if (!accessToken) {
+      throw new AppError("AUTH_CODE_MISSING", "eBay client-credentials token response did not include an access token.", tokenResponse);
+    }
+
+    const expiresIn = typeof tokenResponse.expires_in === "number"
+      ? tokenResponse.expires_in
+      : Number(tokenResponse.expires_in ?? 7200);
+
+    this.cachedApplicationAccessToken = {
+      key,
+      accessToken,
+      expiresAtMs: Date.now() + expiresIn * 1000
+    };
+
+    return accessToken;
   }
 
   public async getUser(accessToken: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
@@ -383,6 +430,23 @@ export class EbayApiClient {
       signal
     );
     return parseLegacyListing(xml, marketplaceId);
+  }
+
+  public async getLegacyListingBrowse(auth: EbayAuthEnvironment, marketplaceId: string, listingId: string, signal?: AbortSignal) {
+    const applicationAccessToken = await this.getApplicationAccessToken(auth, undefined, signal);
+    const item = await this.requestJson(
+      `${this.environment.apiBaseUrl}/buy/browse/v1/item/get_item_by_legacy_id?legacy_item_id=${encodeURIComponent(listingId)}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${applicationAccessToken}`,
+          Accept: "application/json",
+          "X-EBAY-C-MARKETPLACE-ID": marketplaceId
+        }
+      },
+      signal
+    );
+    return parseBrowseLegacyListing(item, marketplaceId, listingId);
   }
 
   public async reviseInventoryStatus(accessToken: string, marketplaceId: string, listingId: string, sku: string | undefined, priceValue: number | undefined, priceCurrency: string, quantity: number | undefined, signal?: AbortSignal) {
@@ -659,6 +723,63 @@ function parseTradingResponseSummary(xml: string, callName: string): Record<stri
   };
 }
 
+function parseBrowseLegacyListing(item: Record<string, unknown>, marketplaceId: string, listingId: string): Record<string, unknown> {
+  const localizedAspects = arrayify(item.localizedAspects).map((entry) => asRecord(entry)).filter((entry): entry is Record<string, unknown> => entry !== undefined);
+  const itemSpecifics: Record<string, string[]> = {};
+  for (const aspect of localizedAspects) {
+    const name = readString(aspect, "name");
+    const values = arrayify(aspect.value).map((value) => String(value));
+    if (name && values.length > 0) {
+      itemSpecifics[name] = values;
+    }
+  }
+
+  const imageUrls = [
+    readString(asRecord(item.image), "imageUrl"),
+    ...arrayify(item.additionalImages).map((entry) => readString(asRecord(entry), "imageUrl"))
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  const categoryIdPath = readString(item, "categoryIdPath");
+  const categoryId = categoryIdPath?.split("|").at(-1);
+  const primaryAvailability = asRecord(arrayify(item.estimatedAvailabilities)[0]);
+  const seller = asRecord(item.seller);
+  const location = asRecord(item.itemLocation);
+  const price = asRecord(item.price);
+  const description = readString(item, "description") ?? readString(item, "shortDescription");
+
+  return {
+    source: "TRADING",
+    detailSource: "BROWSE",
+    marketplaceId,
+    listingId,
+    sku: readString(item, "merchantItemId") ?? readString(item, "itemGroupId"),
+    status: browseAvailabilityToListingStatus(readString(primaryAvailability, "estimatedAvailabilityStatus")),
+    title: readString(item, "title"),
+    description,
+    categoryId,
+    categoryName: readString(item, "categoryPath")?.split("|").at(-1),
+    conditionId: readString(item, "conditionId"),
+    conditionDisplayName: readString(item, "condition"),
+    listingType: "FixedPriceItem",
+    startPrice: parseNumber(readString(price, "value")),
+    priceCurrency: readString(price, "currency"),
+    quantity: parseInteger(readString(primaryAvailability, "estimatedAvailableQuantity") ?? readString(primaryAvailability, "estimatedRemainingQuantity")),
+    quantityAvailable: parseInteger(readString(primaryAvailability, "estimatedRemainingQuantity") ?? readString(primaryAvailability, "estimatedAvailableQuantity")),
+    quantitySold: parseInteger(readString(primaryAvailability, "estimatedSoldQuantity")),
+    startTimeUtc: normalizeDateTime(readString(item, "itemCreationDate")),
+    endTimeUtc: undefined,
+    viewItemUrl: readString(item, "itemWebUrl") ?? `https://www.ebay.com/itm/${listingId}`,
+    bestOfferEnabled: undefined,
+    listingDuration: undefined,
+    location: [readString(location, "city"), readString(location, "stateOrProvince")].filter(Boolean).join(", ") || undefined,
+    postalCode: readString(location, "postalCode"),
+    country: readString(location, "country"),
+    dispatchTimeMax: undefined,
+    pictureUrls: imageUrls,
+    itemSpecifics
+  };
+}
+
 function firstObjectValue(root: Record<string, unknown>): Record<string, unknown> {
   for (const [key, value] of Object.entries(root)) {
     if (key.startsWith("?")) {
@@ -673,6 +794,18 @@ function firstObjectValue(root: Record<string, unknown>): Record<string, unknown
 
   const firstRecord = Object.values(root).map((value) => asRecord(value)).find((value) => value !== undefined);
   return firstRecord ?? root;
+}
+
+function browseAvailabilityToListingStatus(status: string | undefined): string | undefined {
+  if (!status) {
+    return undefined;
+  }
+
+  if (status === "IN_STOCK") {
+    return "ACTIVE";
+  }
+
+  return status;
 }
 
 function firstDescendantString(root: Record<string, unknown>, key: string): string | undefined {
@@ -711,6 +844,14 @@ function readString(record: Record<string, unknown> | undefined, key: string): s
     const asObject = value as Record<string, unknown>;
     if (typeof asObject["#text"] === "string") return asObject["#text"];
   }
+  return undefined;
+}
+
+function optionalString(value: unknown): string | undefined {
+  if (typeof value === "string" && value.length > 0) {
+    return value;
+  }
+
   return undefined;
 }
 

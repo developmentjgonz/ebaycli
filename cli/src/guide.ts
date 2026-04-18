@@ -78,6 +78,7 @@ function buildOverviewGuide() {
     coreCommands: [
       "ebay config auth --client-id ... --client-secret ... --runame ...",
       "ebay auth login --environment production",
+      "ebay status --json",
       "ebay auth status --json",
       "ebay setup doctor --json",
       "ebay listings list --json",
@@ -118,6 +119,12 @@ function buildCapabilitiesGuide() {
         command: "ebay auth disconnect",
         purpose:
           "Delete the local eBay session and return the My eBay path the user must follow to revoke the third-party grant."
+      }
+    ],
+    operations: [
+      {
+        command: "ebay status",
+        purpose: "Return one combined snapshot containing profile config, auth status, and doctor results for the selected profile."
       }
     ],
     setup: [
@@ -174,7 +181,7 @@ function buildWorkflowGuide() {
       steps: [
         "Run `ebay config auth --client-id ... --client-secret ... --runame ...` first.",
         "Finish the eBay consent flow in the browser.",
-        "Run `ebay auth status --json` to verify the local session."
+        "Run `ebay status --json` to verify the local session and seller readiness in one call."
       ]
     },
     disconnect: {
@@ -186,7 +193,7 @@ function buildWorkflowGuide() {
     },
     sellerReadiness: {
       steps: [
-        "Run `ebay setup doctor --json`.",
+        "Run `ebay status --json` or `ebay setup doctor --json`.",
         "If Business Policies or location are missing, use `ebay setup policies sync` and `ebay setup location set` where the account supports them.",
         "If eBay rejects policy setup, reads can still work, but Inventory create/update may remain blocked."
       ]
@@ -251,6 +258,7 @@ function buildAgentNotesGuide() {
   return {
     principles: [
       "Prefer `--json` for every read, plan, and apply command.",
+      "Use `ebay status --json` as the first operational check on a profile.",
       "Use `ebay guide listing-spec --json` before generating listing drafts.",
       "Use `ebay listings pull <reference> --out <file>` to ground updates on an existing listing.",
       "Prefer plan commands before apply commands.",

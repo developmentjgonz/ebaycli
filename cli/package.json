@@ -12,7 +12,8 @@
     "dist",
     "README.md",
     "LICENSE",
-    "llms.txt"
+    "llms.txt",
+    "SUPPORT_MATRIX.md"
   ],
   "scripts": {
     "clean": "rm -rf dist",
