@@ -11,5 +11,6 @@ Use these entrypoints:
 - CLI package and source: `/cli/package.json`, `/cli/src`
 - Architecture: `/docs/agent-first-architecture.md`
 - Backend docs: `/backend/EbayStoreManager.Api/README.md`
+- Backend solution: `/backend/EbayStoreManager.sln`
 
 The public product story is self-managed CLI first. The backend is optional reference infrastructure.

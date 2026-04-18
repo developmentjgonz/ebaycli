@@ -16,4 +16,5 @@ Start here:
 - CLI usage and publish details: [cli/README.md](/Users/admin/Projects/ebaycli/cli/README.md)
 - Architecture: [docs/agent-first-architecture.md](/Users/admin/Projects/ebaycli/docs/agent-first-architecture.md)
 - Backend reference setup: [backend/EbayStoreManager.Api/README.md](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api/README.md)
+- Backend solution: [backend/EbayStoreManager.sln](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.sln)
 - Testing notes: [TEST_STRATEGY.md](/Users/admin/Projects/ebaycli/TEST_STRATEGY.md), [TESTING.md](/Users/admin/Projects/ebaycli/TESTING.md)

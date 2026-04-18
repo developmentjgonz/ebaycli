@@ -12,12 +12,12 @@ The public CLI path is self-managed and stores the eBay session locally. This ba
 
 ## Local run
 
-From [/Users/admin/Projects/ebaycli](/Users/admin/Projects/ebaycli):
+From [/Users/admin/Projects/ebaycli/backend](/Users/admin/Projects/ebaycli/backend):
 
 ```bash
 dotnet build EbayStoreManager.sln
 dotnet test EbayStoreManager.sln
-dotnet run --project backend/EbayStoreManager.Api
+dotnet run --project EbayStoreManager.Api
 ```
 
 Default local URLs come from [launchSettings.json](/Users/admin/Projects/ebaycli/backend/EbayStoreManager.Api/Properties/launchSettings.json):
