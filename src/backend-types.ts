@@ -82,6 +82,12 @@ export const listingImageDtoSchema = z.object({
 });
 export type ListingImageDto = z.infer<typeof listingImageDtoSchema>;
 
+export const listingConditionDescriptorDtoSchema = z.object({
+  name: z.string().min(1),
+  values: z.array(z.string().min(1)).min(1)
+});
+export type ListingConditionDescriptorDto = z.infer<typeof listingConditionDescriptorDtoSchema>;
+
 export const listingSpecRequestSchema = z.object({
   sku: z.string().min(1),
   marketplaceId: z.string().optional(),
@@ -99,6 +105,7 @@ export const listingSpecRequestSchema = z.object({
   images: z.array(listingImageDtoSchema).optional(),
   aspects: z.record(z.string(), z.array(z.string())).optional(),
   packageWeightAndSize: z.unknown().optional(),
+  conditionDescriptors: z.array(listingConditionDescriptorDtoSchema).optional(),
   locale: z.string().optional()
 });
 export type ListingSpecRequest = z.infer<typeof listingSpecRequestSchema>;

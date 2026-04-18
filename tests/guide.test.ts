@@ -7,11 +7,15 @@ describe("guide", () => {
     const guide = getGuide("listing-spec") as {
       format: string;
       requiredFields: string[];
+      optionalFields: string[];
+      conditionNotes: string[];
       example: { sku: string; title: string };
     };
 
     expect(guide.format).toBe("YAML or JSON");
     expect(guide.requiredFields).toContain("sku");
+    expect(guide.optionalFields).toContain("conditionDescriptors");
+    expect(guide.conditionNotes[0]).toContain("conditionDescriptors");
     expect(guide.example.sku).toBe("GENGAR-38-PLUSH-001");
   });
 });

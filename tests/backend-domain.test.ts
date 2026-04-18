@@ -37,6 +37,10 @@ describe("parseListingSpecFile", () => {
           "description: Brass desk lamp",
           "categoryId: \"12345\"",
           "condition: USED_EXCELLENT",
+          "conditionDescriptors:",
+          "  - name: \"40001\"",
+          "    values:",
+          "      - \"400010\"",
           "price:",
           "  value: \"79.99\"",
           "  currency: USD",
@@ -49,6 +53,12 @@ describe("parseListingSpecFile", () => {
       const parsed = await parseListingSpecFile(listingPath);
       expect(parsed.priceValue).toBe(79.99);
       expect(parsed.priceCurrency).toBe("USD");
+      expect(parsed.conditionDescriptors).toEqual([
+        {
+          name: "40001",
+          values: ["400010"]
+        }
+      ]);
       expect(parsed.images).toEqual([
         {
           fileName: "lamp.jpg",

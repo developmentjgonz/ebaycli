@@ -5,6 +5,11 @@ description: >
   Restored vintage brass desk lamp with tested wiring and minor cosmetic wear.
 categoryId: "262197"
 condition: USED_EXCELLENT
+# Some categories require conditionDescriptors as well.
+# Example for ungraded trading cards in category 261328:
+# conditionDescriptors:
+#   - name: "40001"
+#     values: ["400010"]
 format: FIXED_PRICE
 price:
   value: "89.99"

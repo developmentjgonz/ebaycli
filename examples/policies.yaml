@@ -5,8 +5,7 @@ paymentPolicy:
     - name: ALL_EXCLUDING_MOTORS_VEHICLES
       default: true
   immediatePay: true
-  paymentMethods:
-    - paymentMethodType: PAYPAL
+  # eBay managed payments do not require legacy PayPal payment-method entries here.
 fulfillmentPolicy:
   marketplaceId: EBAY_US
   name: CLI Fulfillment Policy
@@ -21,7 +20,7 @@ fulfillmentPolicy:
       costType: FLAT_RATE
       shippingServices:
         - shippingCarrierCode: USPS
-          shippingServiceCode: USPSGround
+          shippingServiceCode: USPSGroundAdvantage
           shippingCost:
             value: "9.99"
             currency: USD

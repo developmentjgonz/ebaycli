@@ -206,6 +206,7 @@ function buildListingSpecGuide() {
     optionalFields: [
       "marketplaceId",
       "conditionDescription",
+      "conditionDescriptors",
       "format",
       "priceCurrency",
       "policies",
@@ -219,6 +220,10 @@ function buildListingSpecGuide() {
       "Each image entry can be a URL string.",
       "Each image entry can be a local path string.",
       "Each image entry can be an object with `url`, `path`, or `base64Content`."
+    ],
+    conditionNotes: [
+      "Some categories require `conditionDescriptors` in addition to `condition`.",
+      "Example for an ungraded trading card in category `261328`: `[{ name: \"40001\", values: [\"400010\"] }]`."
     ],
     example: LISTING_SPEC_EXAMPLE
   };

@@ -329,6 +329,7 @@ async function normalizeListingSpec(raw: JsonObject, baseDir: string): Promise<L
     images: await normalizeImages(raw.images, baseDir),
     aspects: normalizeAspects(raw.aspects),
     packageWeightAndSize: raw.packageWeightAndSize,
+    conditionDescriptors: normalizeConditionDescriptors(raw.conditionDescriptors),
     locale: optionalString(raw.locale)
   };
 }
@@ -351,6 +352,7 @@ async function normalizeListingPatch(raw: JsonObject, baseDir: string): Promise<
   if ("images" in raw) request.images = await normalizeImages(raw.images, baseDir);
   if ("aspects" in raw) request.aspects = normalizeAspects(raw.aspects);
   if ("packageWeightAndSize" in raw) request.packageWeightAndSize = raw.packageWeightAndSize;
+  if ("conditionDescriptors" in raw) request.conditionDescriptors = normalizeConditionDescriptors(raw.conditionDescriptors);
   if ("locale" in raw) request.locale = optionalString(raw.locale);
   return request;
 }
@@ -439,6 +441,40 @@ function normalizeAspects(value: unknown) {
     aspects[key] = rawValues.filter((entry): entry is string => typeof entry === "string");
   }
   return aspects;
+}
+
+function normalizeConditionDescriptors(value: unknown) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new AppError("VALIDATION_ERROR", "`conditionDescriptors` must be an array.");
+  }
+
+  return value.map((descriptor, index) => {
+    if (!isRecord(descriptor)) {
+      throw new AppError("VALIDATION_ERROR", `conditionDescriptors[${index}] must be an object.`);
+    }
+
+    if (typeof descriptor.name !== "string" || descriptor.name.length === 0) {
+      throw new AppError("VALIDATION_ERROR", `conditionDescriptors[${index}].name is required.`);
+    }
+
+    if (!Array.isArray(descriptor.values) || descriptor.values.length === 0) {
+      throw new AppError("VALIDATION_ERROR", `conditionDescriptors[${index}].values must be a non-empty array.`);
+    }
+
+    const values = descriptor.values.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+    if (values.length !== descriptor.values.length) {
+      throw new AppError("VALIDATION_ERROR", `conditionDescriptors[${index}].values must contain only non-empty strings.`);
+    }
+
+    return {
+      name: descriptor.name,
+      values
+    };
+  });
 }
 
 function readPriceValue(raw: JsonObject): number {

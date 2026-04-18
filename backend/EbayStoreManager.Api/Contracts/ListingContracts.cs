@@ -13,6 +13,10 @@ public sealed record ListingImageDto(
     string? ContentType,
     string? Base64Content);
 
+public sealed record ListingConditionDescriptorDto(
+    string Name,
+    IReadOnlyList<string> Values);
+
 public sealed record ListingSpecDto(
     string Sku,
     string? MarketplaceId,
@@ -30,6 +34,7 @@ public sealed record ListingSpecDto(
     IReadOnlyList<ListingImageDto>? Images,
     IReadOnlyDictionary<string, IReadOnlyList<string>>? Aspects,
     JsonElement? PackageWeightAndSize,
+    IReadOnlyList<ListingConditionDescriptorDto>? ConditionDescriptors,
     string? Locale);
 
 public sealed record ListingPatchDto(
@@ -49,6 +54,7 @@ public sealed record ListingPatchDto(
     IReadOnlyList<ListingImageDto>? Images,
     IReadOnlyDictionary<string, IReadOnlyList<string>>? Aspects,
     JsonElement? PackageWeightAndSize,
+    IReadOnlyList<ListingConditionDescriptorDto>? ConditionDescriptors,
     string? Locale);
 
 public sealed record MutationActionDto(

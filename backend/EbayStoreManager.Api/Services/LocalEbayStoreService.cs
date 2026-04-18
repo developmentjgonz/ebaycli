@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Globalization;
 using EbayStoreManager.Api.Contracts;
 using EbayStoreManager.Api.Domain;
 
@@ -191,10 +192,10 @@ public sealed class LocalEbayStoreService(
                 item["listingId"]?.GetValue<string>(),
                 item["status"]?.GetValue<string>(),
                 item["title"]?.GetValue<string>(),
-                item["priceValue"]?.GetValue<decimal?>(),
+                ReadDecimal(item["priceValue"]),
                 item["priceCurrency"]?.GetValue<string>(),
-                item["availableQuantity"]?.GetValue<int?>(),
-                item["quantitySold"]?.GetValue<int?>(),
+                ReadInt(item["availableQuantity"]),
+                ReadInt(item["quantitySold"]),
                 ParseDateTimeOffset(item["soldAtUtc"]?.GetValue<string>()),
                 item["buyerUsername"]?.GetValue<string>(),
                 item["source"]?.GetValue<string>(),
@@ -211,10 +212,10 @@ public sealed class LocalEbayStoreService(
                 item["listingId"]?.GetValue<string>(),
                 item["status"]?.GetValue<string>(),
                 item["title"]?.GetValue<string>(),
-                item["priceValue"]?.GetValue<decimal?>(),
+                ReadDecimal(item["priceValue"]),
                 item["priceCurrency"]?.GetValue<string>(),
-                item["availableQuantity"]?.GetValue<int?>(),
-                item["quantitySold"]?.GetValue<int?>(),
+                ReadInt(item["availableQuantity"]),
+                ReadInt(item["quantitySold"]),
                 ParseDateTimeOffset(item["soldAtUtc"]?.GetValue<string>()),
                 item["buyerUsername"]?.GetValue<string>(),
                 item["source"]?.GetValue<string>(),
@@ -256,9 +257,9 @@ public sealed class LocalEbayStoreService(
                         offer["listingId"]?.GetValue<string>(),
                         offer["status"]?.GetValue<string>(),
                         inventoryItem["product"]?["title"]?.GetValue<string>(),
-                        offer["pricingSummary"]?["price"]?["value"]?.GetValue<decimal?>(),
+                        ReadDecimal(offer["pricingSummary"]?["price"]?["value"]),
                         offer["pricingSummary"]?["price"]?["currency"]?.GetValue<string>(),
-                        inventoryItem["availability"]?["shipToLocationAvailability"]?["quantity"]?.GetValue<int?>(),
+                        ReadInt(inventoryItem["availability"]?["shipToLocationAvailability"]?["quantity"]),
                         null,
                         null,
                         null,
@@ -304,14 +305,41 @@ public sealed class LocalEbayStoreService(
         var environment = environmentResolver.Resolve(session.Environment);
         var uploadedImages = await UploadImagesAsync(environment, session.AccessToken, request.Images ?? [], cancellationToken);
         var effectiveMarketplaceId = request.MarketplaceId ?? session.MarketplaceId;
-        await gateway.UpsertInventoryItemAsync(environment, session.AccessToken, request.Sku, BuildInventoryPayload(request, uploadedImages), request.Locale, effectiveMarketplaceId, cancellationToken);
-        var offer = await gateway.CreateOfferAsync(environment, session.AccessToken, BuildOfferPayload(session, request), request.Locale, effectiveMarketplaceId, cancellationToken);
+        var inventoryPayload = BuildInventoryPayload(request, uploadedImages);
+        var offerPayload = BuildOfferPayload(session, request);
+        await gateway.UpsertInventoryItemAsync(environment, session.AccessToken, request.Sku, inventoryPayload, request.Locale, effectiveMarketplaceId, cancellationToken);
+
+        JsonObject offer;
+        var offerRecovered = false;
+        string? recoveryMessage = null;
+        try
+        {
+            offer = await gateway.CreateOfferAsync(environment, session.AccessToken, offerPayload, request.Locale, effectiveMarketplaceId, cancellationToken);
+        }
+        catch (InvalidOperationException exception) when (IsAlreadyExistingOfferError(exception))
+        {
+            offer = await RecoverExistingOfferAsync(environment, session, request, offerPayload, effectiveMarketplaceId, cancellationToken)
+                ?? throw new InvalidOperationException($"eBay reported that an offer already exists for SKU '{request.Sku}', but no matching offer could be resolved.", exception);
+            offerRecovered = true;
+            recoveryMessage = "Recovered an existing offer after eBay reported `Offer entity already exists`.";
+        }
+
         var offerId = offer["offerId"]?.GetValue<string>() ?? throw new InvalidOperationException("eBay did not return an offerId.");
-        var publish = await gateway.PublishOfferAsync(environment, session.AccessToken, offerId, cancellationToken);
+        var listingId = offer["listingId"]?.GetValue<string>();
+        JsonObject? publish = null;
+        if (string.IsNullOrWhiteSpace(listingId))
+        {
+            publish = await gateway.PublishOfferAsync(environment, session.AccessToken, offerId, cancellationToken);
+            listingId = publish["listingId"]?.GetValue<string>();
+        }
+
         return new JsonObject
         {
             ["sku"] = request.Sku,
             ["offerId"] = offerId,
+            ["listingId"] = listingId,
+            ["offerRecovered"] = offerRecovered,
+            ["message"] = recoveryMessage,
             ["publish"] = publish
         };
     }
@@ -689,6 +717,7 @@ public sealed class LocalEbayStoreService(
             Images: null,
             Aspects: null,
             PackageWeightAndSize: null,
+            ConditionDescriptors: null,
             Locale: null,
             MarketplaceId: null,
             Sku: null
@@ -703,6 +732,21 @@ public sealed class LocalEbayStoreService(
 
         if (request.PriceValue <= 0) throw new InvalidOperationException("Listing price must be greater than zero.");
         if (request.AvailableQuantity < 0) throw new InvalidOperationException("Available quantity must be zero or greater.");
+        if (request.ConditionDescriptors is not null)
+        {
+            foreach (var descriptor in request.ConditionDescriptors)
+            {
+                if (string.IsNullOrWhiteSpace(descriptor.Name))
+                {
+                    throw new InvalidOperationException("Each condition descriptor requires a name.");
+                }
+
+                if (descriptor.Values.Count == 0 || descriptor.Values.Any(string.IsNullOrWhiteSpace))
+                {
+                    throw new InvalidOperationException($"Condition descriptor '{descriptor.Name}' requires one or more non-empty values.");
+                }
+            }
+        }
     }
 
     private static ListingSpecDto ToListingSpec(ListingAggregate aggregate, string fallbackMarketplaceId)
@@ -731,22 +775,23 @@ public sealed class LocalEbayStoreService(
                 aggregate.LegacyItem["conditionId"]?.GetValue<string>() ?? aggregate.LegacyItem["conditionDisplayName"]?.GetValue<string>() ?? string.Empty,
                 aggregate.LegacyItem["conditionDisplayName"]?.GetValue<string>(),
                 aggregate.LegacyItem["listingType"]?.GetValue<string>() ?? "FIXED_PRICE",
-                aggregate.LegacyItem["startPrice"]?.GetValue<decimal?>() ?? 0m,
+                ReadDecimal(aggregate.LegacyItem["startPrice"]) ?? 0m,
                 aggregate.LegacyItem["priceCurrency"]?.GetValue<string>() ?? "USD",
-                aggregate.LegacyItem["quantityAvailable"]?.GetValue<int?>()
-                    ?? aggregate.LegacyItem["quantity"]?.GetValue<int?>()
+                ReadInt(aggregate.LegacyItem["quantityAvailable"])
+                    ?? ReadInt(aggregate.LegacyItem["quantity"])
                     ?? 0,
                 null,
                 null,
                 legacyImages,
                 legacyAspects,
                 null,
+                null,
                 "en-US");
         }
 
         var inventory = aggregate.InventoryItem;
         var offer = aggregate.Offer;
-        var priceValue = offer?["pricingSummary"]?["price"]?["value"]?.GetValue<decimal?>() ?? 0m;
+        var priceValue = ReadDecimal(offer?["pricingSummary"]?["price"]?["value"]) ?? 0m;
         var priceCurrency = offer?["pricingSummary"]?["price"]?["currency"]?.GetValue<string>() ?? "USD";
         var images = (inventory?["product"]?["imageUrls"] as JsonArray)?.Select(x => new ListingImageDto(x?.GetValue<string>(), null, null, null)).ToList() ?? [];
 
@@ -773,12 +818,13 @@ public sealed class LocalEbayStoreService(
             offer?["format"]?.GetValue<string>() ?? "FIXED_PRICE",
             priceValue,
             priceCurrency,
-            inventory?["availability"]?["shipToLocationAvailability"]?["quantity"]?.GetValue<int?>() ?? offer?["availableQuantity"]?.GetValue<int?>() ?? 0,
+            ReadInt(inventory?["availability"]?["shipToLocationAvailability"]?["quantity"]) ?? ReadInt(offer?["availableQuantity"]) ?? 0,
             new ListingPoliciesDto(offer?["listingPolicies"]?["paymentPolicyId"]?.GetValue<string>(), offer?["listingPolicies"]?["returnPolicyId"]?.GetValue<string>(), offer?["listingPolicies"]?["fulfillmentPolicyId"]?.GetValue<string>()),
             offer?["merchantLocationKey"]?.GetValue<string>(),
             images,
             aspects,
             inventory?["packageWeightAndSize"]?.Deserialize<JsonElement>(),
+            ReadConditionDescriptors(inventory?["conditionDescriptors"]),
             "en-US");
     }
 
@@ -800,6 +846,7 @@ public sealed class LocalEbayStoreService(
             patch.Images ?? current.Images,
             patch.Aspects ?? current.Aspects,
             patch.PackageWeightAndSize ?? current.PackageWeightAndSize,
+            patch.ConditionDescriptors ?? current.ConditionDescriptors,
             patch.Locale ?? current.Locale);
 
     private static JsonObject BuildInventoryPayload(ListingSpecDto request, IReadOnlyList<string> imageUrls)
@@ -834,6 +881,14 @@ public sealed class LocalEbayStoreService(
         };
 
         if (!string.IsNullOrWhiteSpace(request.ConditionDescription)) payload["conditionDescription"] = request.ConditionDescription;
+        if (request.ConditionDescriptors is not null && request.ConditionDescriptors.Count > 0)
+        {
+            payload["conditionDescriptors"] = new JsonArray(request.ConditionDescriptors.Select(descriptor => (JsonNode)new JsonObject
+            {
+                ["name"] = descriptor.Name,
+                ["values"] = new JsonArray(descriptor.Values.Select(value => (JsonNode?)value).ToArray())
+            }).ToArray());
+        }
         if (request.PackageWeightAndSize.HasValue) payload["packageWeightAndSize"] = JsonNode.Parse(request.PackageWeightAndSize.Value.GetRawText());
         return payload;
     }
@@ -908,6 +963,49 @@ public sealed class LocalEbayStoreService(
         };
     }
 
+    private async Task<JsonObject?> RecoverExistingOfferAsync(
+        EbayEnvironmentDescriptor environment,
+        LocalEbaySessionContextDto session,
+        ListingSpecDto request,
+        JsonObject offerPayload,
+        string effectiveMarketplaceId,
+        CancellationToken cancellationToken)
+    {
+        var matches = ReadArray(await gateway.GetOffersAsync(environment, session.AccessToken, request.Sku, cancellationToken), "offers")
+            .Where(offer => string.Equals(offer["marketplaceId"]?.GetValue<string>() ?? session.MarketplaceId, effectiveMarketplaceId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (matches.Count > 1)
+        {
+            matches = matches
+                .Where(offer => string.Equals(offer["categoryId"]?.GetValue<string>(), request.CategoryId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        if (matches.Count != 1)
+        {
+            return null;
+        }
+
+        var recovered = matches[0];
+        if (!string.IsNullOrWhiteSpace(recovered["listingId"]?.GetValue<string>()))
+        {
+            return recovered;
+        }
+
+        var offerId = recovered["offerId"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(offerId))
+        {
+            return null;
+        }
+
+        await gateway.UpdateOfferAsync(environment, session.AccessToken, offerId, offerPayload, request.Locale, effectiveMarketplaceId, cancellationToken);
+        return await gateway.GetOfferAsync(environment, session.AccessToken, offerId, cancellationToken);
+    }
+
+    private static bool IsAlreadyExistingOfferError(Exception exception)
+        => exception.Message.Contains("Offer entity already exists", StringComparison.OrdinalIgnoreCase);
+
     private static string? InferSingleId(JsonObject payload, string arrayName, string idField)
     {
         var items = ReadArray(payload, arrayName);
@@ -916,6 +1014,75 @@ public sealed class LocalEbayStoreService(
 
     private static List<JsonObject> ReadArray(JsonObject payload, string propertyName)
         => payload[propertyName] is JsonArray array ? array.OfType<JsonObject>().ToList() : [];
+
+    private static decimal? ReadDecimal(JsonNode? node)
+    {
+        if (node is not JsonValue value)
+        {
+            return null;
+        }
+
+        if (value.TryGetValue<decimal>(out var decimalValue))
+        {
+            return decimalValue;
+        }
+
+        if (value.TryGetValue<string>(out var stringValue) &&
+            decimal.TryParse(stringValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed))
+        {
+            return parsed;
+        }
+
+        return null;
+    }
+
+    private static int? ReadInt(JsonNode? node)
+    {
+        if (node is not JsonValue value)
+        {
+            return null;
+        }
+
+        if (value.TryGetValue<int>(out var intValue))
+        {
+            return intValue;
+        }
+
+        if (value.TryGetValue<string>(out var stringValue) &&
+            int.TryParse(stringValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+        {
+            return parsed;
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<ListingConditionDescriptorDto>? ReadConditionDescriptors(JsonNode? node)
+    {
+        if (node is not JsonArray descriptors || descriptors.Count == 0)
+        {
+            return null;
+        }
+
+        return descriptors
+            .OfType<JsonObject>()
+            .Select(descriptor => new ListingConditionDescriptorDto(
+                descriptor["name"]?.GetValue<string>() ?? string.Empty,
+                descriptor["values"] is JsonArray values
+                    ? values
+                        .Select(value => value switch
+                        {
+                            null => null,
+                            JsonValue jsonValue when jsonValue.TryGetValue<string>(out var stringValue) => stringValue,
+                            _ => value!.ToJsonString().Trim('"')
+                        })
+                        .Where(value => !string.IsNullOrWhiteSpace(value))
+                        .Cast<string>()
+                        .ToArray()
+                    : []))
+            .Where(descriptor => !string.IsNullOrWhiteSpace(descriptor.Name) && descriptor.Values.Count > 0)
+            .ToArray();
+    }
 
     private static DateTimeOffset? ParseDateTimeOffset(string? value)
         => DateTimeOffset.TryParse(value, out var parsed) ? parsed : null;
