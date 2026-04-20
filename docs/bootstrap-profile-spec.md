@@ -39,7 +39,7 @@ Expected behavior:
 - The CLI should not silently destroy or replace the stored session.
 - The CLI should only clear the session on explicit logout/disconnect/reset.
 
-## Supported auth modes
+## Supported auth mode
 
 ### Backend relay mode
 Use for production.
@@ -55,22 +55,9 @@ Expected behavior:
 - refresh is delegated through the backend
 - normal listing/status/setup flows continue through the CLI
 
-### Direct mode
-Use only as an advanced/private testing fallback when the user has a workable direct OAuth setup.
-
-Expected profile shape includes:
-- `selfManagedApp.clientId`
-- `selfManagedApp.clientSecret`
-- `selfManagedApp.runame`
-- optional accepted/declined/privacy URLs
-- `ebaySession` after login
-
-Expected behavior:
-- login and refresh can be handled directly by the CLI
-- listing/status/setup flows continue through the CLI
-
 Non-negotiable:
 - eBay app credentials are not embedded in the npm package
+- direct eBay app credential configuration is not supported in the CLI
 - the backend is deployment-owned infrastructure, not a way for arbitrary users to bypass eBay developer setup and compliance
 
 ## Existing connection preservation rule
@@ -88,12 +75,10 @@ For the current project intent, that means the last working `freshlifeusa` conne
 From zero local state, the CLI should make the next step obvious.
 
 Desired guidance shape:
-- If no backend URL and no direct app config exist:
+- If no backend URL exists:
   - tell the user to set the backend URL and start auth
 - If backend relay mode is configured:
   - tell the user to start auth
-- If direct mode is configured:
-  - allow direct auth but label it as advanced/private testing
 
 ## Non-goals for this spec
 
@@ -117,7 +102,7 @@ Avoid:
 ## Suggested future implementation approach
 
 When revisiting this later, prefer a small, explicit approach:
-1. detect whether the profile is backend-relay, direct, or unconfigured
+1. detect whether the profile is backend-relay or unconfigured
 2. preserve any existing connected seller session
 3. give targeted guidance when config is incomplete
 4. keep logout/disconnect/reset explicit and user-driven

@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Threading.RateLimiting;
 using System.Text;
+using System.Text.Json;
 using EbayStoreManager.Api.Configuration;
 using EbayStoreManager.Api.Contracts;
 using EbayStoreManager.Api.Data;
@@ -123,7 +124,9 @@ app.MapGet("/privacy-policy", (IOptions<LegalOptions> options) => Results.Text(B
 app.MapGet("/auth/success", (HttpRequest request, IOptions<LegalOptions> options) => Results.Text(BuildAuthLandingPage("Authorization complete", "You can return to the CLI now. If the CLI is waiting in manual paste mode, paste the full URL from this page back into the terminal.", request, options.Value), "text/html", Encoding.UTF8));
 app.MapGet("/auth/declined", (HttpRequest request, IOptions<LegalOptions> options) => Results.Text(BuildAuthLandingPage("Authorization declined", "The eBay consent flow was declined or canceled. You can close this page and retry the login command from the CLI when ready.", request, options.Value), "text/html", Encoding.UTF8));
 app.MapGet("/notifications/ebay/marketplace-account-deletion", HandleMarketplaceAccountDeletionChallenge);
-app.MapPost("/notifications/ebay/marketplace-account-deletion", HandleMarketplaceAccountDeletionNotificationAsync);
+app.MapPost("/notifications/ebay/marketplace-account-deletion", HandleEbayNotificationAsync);
+app.MapGet("/notifications/ebay/authorization-revocation", HandleAuthorizationRevocationChallenge);
+app.MapPost("/notifications/ebay/authorization-revocation", HandleEbayNotificationAsync);
 
 var local = app.MapGroup("/api/local/ebay");
 
@@ -166,6 +169,10 @@ local.MapPost("/refresh", async Task<IResult> (
     {
         return TypedResults.Ok(await localAuth.RefreshAsync(request, cancellationToken));
     }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
+    }
     catch (InvalidOperationException exception)
     {
         return HttpResults.Problem(400, "local_ebay_refresh_failed", exception.Message);
@@ -180,6 +187,10 @@ local.MapPost("/status", async Task<IResult> (
     try
     {
         return TypedResults.Ok(await localStore.GetStatusAsync(request.Session, cancellationToken));
+    }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
     }
     catch (InvalidOperationException exception)
     {
@@ -196,6 +207,10 @@ local.MapPost("/setup/doctor", async Task<IResult> (
     {
         return TypedResults.Ok(await localStore.RunDoctorAsync(request.Session, cancellationToken));
     }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
+    }
     catch (InvalidOperationException exception)
     {
         return HttpResults.Problem(400, "local_ebay_doctor_failed", exception.Message);
@@ -210,6 +225,10 @@ local.MapPost("/setup/policies/sync", async Task<IResult> (
     try
     {
         return TypedResults.Ok(await localStore.SyncPoliciesAsync(request.Session, request, cancellationToken));
+    }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
     }
     catch (InvalidOperationException exception)
     {
@@ -226,6 +245,10 @@ local.MapPost("/setup/policies/opt-in", async Task<IResult> (
     {
         return TypedResults.Ok(await localStore.OptInToPolicyProgramAsync(request.Session, request.ProgramType, cancellationToken));
     }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
+    }
     catch (InvalidOperationException exception)
     {
         return HttpResults.Problem(400, "local_ebay_policy_opt_in_failed", exception.Message);
@@ -240,6 +263,10 @@ local.MapPost("/setup/location", async Task<IResult> (
     try
     {
         return TypedResults.Ok(await localStore.UpsertLocationAsync(request.Session, request, cancellationToken));
+    }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
     }
     catch (InvalidOperationException exception)
     {
@@ -256,6 +283,10 @@ local.MapPost("/listings/list", async Task<IResult> (
     {
         return TypedResults.Ok(await localStore.ListListingsAsync(request.Session, request.Status, request.Page, request.Limit, request.Days, cancellationToken));
     }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
+    }
     catch (InvalidOperationException exception)
     {
         return HttpResults.Problem(400, "local_ebay_listings_list_failed", exception.Message);
@@ -270,6 +301,10 @@ local.MapPost("/listings/get", async Task<IResult> (
     try
     {
         return TypedResults.Ok(await localStore.GetListingAsync(request.Session, request.Reference, cancellationToken));
+    }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
     }
     catch (InvalidOperationException exception)
     {
@@ -286,6 +321,10 @@ local.MapPost("/listings/create/plan", async Task<IResult> (
     {
         return TypedResults.Ok(await localStore.PlanCreateAsync(request.Session, request.Listing, cancellationToken));
     }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
+    }
     catch (InvalidOperationException exception)
     {
         return HttpResults.Problem(400, "local_ebay_listing_plan_create_failed", exception.Message);
@@ -300,6 +339,10 @@ local.MapPost("/listings/create/apply", async Task<IResult> (
     try
     {
         return TypedResults.Ok(await localStore.CreateListingAsync(request.Session, request.Listing, cancellationToken));
+    }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
     }
     catch (InvalidOperationException exception)
     {
@@ -316,6 +359,10 @@ local.MapPost("/listings/update/plan", async Task<IResult> (
     {
         return TypedResults.Ok(await localStore.PlanUpdateAsync(request.Session, request.Reference, request.Listing, cancellationToken));
     }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
+    }
     catch (InvalidOperationException exception)
     {
         return HttpResults.Problem(400, "local_ebay_listing_plan_update_failed", exception.Message);
@@ -330,6 +377,10 @@ local.MapPost("/listings/update/apply", async Task<IResult> (
     try
     {
         return TypedResults.Ok(await localStore.UpdateListingAsync(request.Session, request.Reference, request.Listing, cancellationToken));
+    }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
     }
     catch (InvalidOperationException exception)
     {
@@ -346,6 +397,10 @@ local.MapPost("/listings/end/plan", async Task<IResult> (
     {
         return TypedResults.Ok(await localStore.PlanEndAsync(request.Session, request.Reference, cancellationToken));
     }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
+    }
     catch (InvalidOperationException exception)
     {
         return HttpResults.Problem(400, "local_ebay_listing_plan_end_failed", exception.Message);
@@ -360,6 +415,10 @@ local.MapPost("/listings/end/apply", async Task<IResult> (
     try
     {
         return TypedResults.Ok(await localStore.EndListingAsync(request.Session, request.Reference, cancellationToken));
+    }
+    catch (EbayApiException exception) when (exception.IsAuthorizationRevoked)
+    {
+        return LocalAuthRevokedProblem();
     }
     catch (InvalidOperationException exception)
     {
@@ -389,6 +448,16 @@ app.MapGet("/oauth/ebay/callback", async Task<IResult> (
 app.Run();
 
 static IResult HandleMarketplaceAccountDeletionChallenge(HttpContext context)
+    => HandleEbayNotificationChallenge(
+        context,
+        context.RequestServices.GetRequiredService<IOptions<EbayNotificationOptions>>().Value.MarketplaceAccountDeletionPath);
+
+static IResult HandleAuthorizationRevocationChallenge(HttpContext context)
+    => HandleEbayNotificationChallenge(
+        context,
+        context.RequestServices.GetRequiredService<IOptions<EbayNotificationOptions>>().Value.AuthorizationRevocationPath);
+
+static IResult HandleEbayNotificationChallenge(HttpContext context, string endpointPath)
 {
     var request = context.Request;
     var challengeCode = request.Query["challenge_code"].ToString();
@@ -403,20 +472,70 @@ static IResult HandleMarketplaceAccountDeletionChallenge(HttpContext context)
         return HttpResults.Problem(500, "notification_verification_token_missing", "The eBay notification verification token is not configured.");
     }
 
-    var endpoint = BuildAbsoluteUrl(request, notificationOptions.MarketplaceAccountDeletionPath);
+    var endpoint = BuildAbsoluteUrl(request, endpointPath);
     var challengeResponse = ComputeChallengeResponse(challengeCode, notificationOptions.VerificationToken, endpoint);
     return TypedResults.Ok(new EbayChallengeResponse(challengeResponse));
 }
 
-static async Task<IResult> HandleMarketplaceAccountDeletionNotificationAsync(
+static IResult LocalAuthRevokedProblem()
+    => HttpResults.Problem(
+        StatusCodes.Status401Unauthorized,
+        "local_ebay_auth_revoked",
+        "The eBay authorization for this local seller session has been revoked or expired. Reconnect with `ebay auth login`.");
+
+static async Task<IResult> HandleEbayNotificationAsync(
     HttpRequest request,
     ILogger<Program> logger,
     CancellationToken cancellationToken)
 {
     using var reader = new StreamReader(request.Body);
     var payload = await reader.ReadToEndAsync(cancellationToken);
-    logger.LogInformation("Received eBay marketplace account deletion notification: {Payload}", payload);
+    var metadata = ParseNotificationMetadata(payload);
+    logger.LogInformation(
+        "Received eBay notification. Path={Path} NotificationId={NotificationId} Topic={Topic}",
+        request.Path,
+        metadata.NotificationId,
+        metadata.Topic);
     return Results.NoContent();
+}
+
+static (string? NotificationId, string? Topic) ParseNotificationMetadata(string payload)
+{
+    if (string.IsNullOrWhiteSpace(payload))
+    {
+        return (null, null);
+    }
+
+    try
+    {
+        using var document = JsonDocument.Parse(payload);
+        var root = document.RootElement;
+        var notificationId = TryReadString(root, "notificationId")
+                             ?? TryReadString(root, "notificationId", "value");
+        var topic = TryReadString(root, "metadata", "topic")
+                    ?? TryReadString(root, "topic")
+                    ?? TryReadString(root, "notification", "topic");
+        return (notificationId, topic);
+    }
+    catch (JsonException)
+    {
+        return (null, null);
+    }
+}
+
+static string? TryReadString(JsonElement root, params string[] path)
+{
+    var current = root;
+    foreach (var segment in path)
+    {
+        if (current.ValueKind != JsonValueKind.Object ||
+            !current.TryGetProperty(segment, out current))
+        {
+            return null;
+        }
+    }
+
+    return current.ValueKind == JsonValueKind.String ? current.GetString() : null;
 }
 
 static string BuildAbsoluteUrl(HttpRequest request, string path)
@@ -456,7 +575,7 @@ static string BuildPrivacyPolicy(LegalOptions options)
 <body>
   <h1>{{WebUtility.HtmlEncode(options.CompanyName)}} Privacy Policy</h1>
   <p><strong>Effective date:</strong> {{WebUtility.HtmlEncode(options.EffectiveDate)}}</p>
-  <p>This application is an optional backend companion for a self-managed eBay CLI. It may host privacy/auth landing pages, support optional token handling, and expose server-side endpoints required by eBay for users who self-host it.</p>
+  <p>This application is the backend relay for a local eBay CLI. It hosts privacy/auth landing pages, handles eBay OAuth callback and token refresh, and exposes server-side endpoints required by eBay for production keysets.</p>
 
   <h2>Information processed</h2>
   <p>When you connect an eBay account, the service may process eBay account identifiers, OAuth token material, listing metadata, seller policy information, and temporary authorization-state records needed to complete login or execute a requested operation.</p>

@@ -9,7 +9,6 @@ import {
   createLocalListingPlan,
   createOrSetLocalLocation,
   getLocalConnectionStatus,
-  getLocalListing,
   listLocalListings,
   parseListingPatchFile,
   parseListingSpecFile,
@@ -139,7 +138,6 @@ describe("bootstrap guidance", () => {
           mode: "unconfigured",
           configured: {
             backendBaseUrl: false,
-            selfManagedApp: false,
             ebaySession: false
           },
           nextCommands: [
@@ -165,7 +163,6 @@ describe("bootstrap guidance", () => {
     try {
       const profile = requireConfiguredBackendProfile();
       expect(profile.backendBaseUrl).toBe("https://backend.example.test");
-      expect(profile.selfManagedApp).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -175,12 +172,7 @@ describe("bootstrap guidance", () => {
     const dir = useIsolatedConfigHome();
     const profile = upsertBackendProfile({
       name: "configured",
-      selfManagedApp: {
-        environment: "sandbox",
-        clientId: "sandbox-client-id",
-        clientSecret: "sandbox-client-secret",
-        runame: "sandbox-runame"
-      }
+      backendBaseUrl: "https://backend.example.test"
     });
 
     try {
@@ -198,14 +190,13 @@ describe("bootstrap guidance", () => {
         expect.objectContaining({
           profile: "configured",
           issue: "missing_ebay_session",
-          mode: "direct",
+          mode: "backend-relay",
           configured: {
-            backendBaseUrl: false,
-            selfManagedApp: true,
+            backendBaseUrl: true,
             ebaySession: false
           },
           nextCommands: [
-            "ebay auth login --environment sandbox --json",
+            "ebay auth login --environment production --json",
             "ebay status --json"
           ]
         })
@@ -217,35 +208,6 @@ describe("bootstrap guidance", () => {
 });
 
 describe("local eBay session flows", () => {
-  it("builds self-managed authorization locally with the configured eBay app", async () => {
-    const dir = useIsolatedConfigHome();
-    const profile = upsertBackendProfile({
-      name: "self-managed",
-      selfManagedApp: {
-        environment: "sandbox",
-        clientId: "sandbox-client-id",
-        clientSecret: "sandbox-client-secret",
-        runame: "sandbox-runame",
-        privacyPolicyUrl: "https://example.test/privacy",
-        acceptedUrl: "https://example.test/auth/success",
-        declinedUrl: "https://example.test/auth/declined"
-      }
-    });
-
-    const result = await beginLocalEbayAuthorization(profile, {
-      environment: "sandbox",
-      callbackUrl: "https://example.test/auth/success",
-      marketplaceId: "EBAY_US"
-    });
-
-    expect(result.environment).toBe("sandbox");
-    expect(result.authorizeUrl).toContain("https://auth.sandbox.ebay.com/oauth2/authorize");
-    expect(result.authorizeUrl).toContain("client_id=sandbox-client-id");
-    expect(result.authorizeUrl).toContain("redirect_uri=sandbox-runame");
-
-    rmSync(dir, { recursive: true, force: true });
-  });
-
   it("uses the backend relay for authorization start with only a backend URL configured", async () => {
     const dir = useIsolatedConfigHome();
     const profile = upsertBackendProfile({
@@ -291,203 +253,6 @@ describe("local eBay session flows", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     rmSync(dir, { recursive: true, force: true });
-  });
-
-  it("rejects self-managed authorization when the requested environment does not match the configured app", async () => {
-    const dir = useIsolatedConfigHome();
-    const profile = upsertBackendProfile({
-      name: "self-managed-mismatch",
-      selfManagedApp: {
-        environment: "production",
-        clientId: "prod-client-id",
-        clientSecret: "prod-client-secret",
-        runame: "prod-runame",
-        privacyPolicyUrl: "https://example.test/privacy",
-        acceptedUrl: "https://example.test/auth/success",
-        declinedUrl: "https://example.test/auth/declined"
-      }
-    });
-
-    let thrown: unknown;
-    try {
-      await beginLocalEbayAuthorization(profile, {
-        environment: "sandbox",
-        callbackUrl: "https://example.test/auth/success",
-        marketplaceId: "EBAY_US"
-      });
-    } catch (error) {
-      thrown = error;
-    }
-
-    expect(thrown).toBeInstanceOf(AppError);
-    const error = thrown as AppError;
-    expect(error.message).toMatch(/configured for production auth/i);
-    expect(error.details).toEqual(
-      expect.objectContaining({
-        issue: "environment_mismatch",
-        requestedEnvironment: "sandbox",
-        configuredEnvironment: "production",
-        nextCommands: [
-          "ebay auth login --environment production --json",
-          "ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment sandbox --json",
-          "ebay config status --json"
-        ]
-      })
-    );
-
-    rmSync(dir, { recursive: true, force: true });
-  });
-
-  it("refreshes expired local sessions and persists the new tokens before calling status", async () => {
-    const dir = useIsolatedConfigHome();
-
-    const expiredSession = {
-      environment: "sandbox",
-      marketplaceId: "EBAY_US",
-      accessToken: "expired-access-token",
-      refreshToken: "refresh-token-1",
-      accessTokenExpiresAtUtc: "2000-01-01T00:00:00Z"
-    };
-
-    const profile = upsertBackendProfile({
-      name: "default",
-      selfManagedApp: {
-        environment: "sandbox",
-        clientId: "sandbox-client-id",
-        clientSecret: "sandbox-client-secret",
-        runame: "sandbox-runame",
-        privacyPolicyUrl: "https://example.test/privacy",
-        acceptedUrl: "https://example.test/auth/success",
-        declinedUrl: "https://example.test/auth/declined"
-      },
-      ebaySession: expiredSession,
-      outputFormat: "json"
-    });
-
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.endsWith("/identity/v1/oauth2/token")) {
-        expect(String(init?.body)).toContain("refresh_token=refresh-token-1");
-        return new Response(
-          JSON.stringify({
-            accessToken: "fresh-access-token",
-            access_token: "fresh-access-token",
-            refreshToken: "refresh-token-2",
-            refresh_token: "refresh-token-2",
-            accessTokenExpiresAtUtc: "2099-01-01T00:00:00Z",
-            expires_in: 7200,
-            refresh_token_expires_in: 86400,
-            token_type: "User Access Token"
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      if (url.endsWith("/commerce/identity/v1/user/")) {
-        return new Response(
-          JSON.stringify({
-            userId: "user-123",
-            username: "testuser_refresh"
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      if (url.endsWith("/sell/account/v1/privilege")) {
-        expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe("Bearer fresh-access-token");
-        return new Response(
-          JSON.stringify({
-            sellerRegistrationCompleted: true
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      throw new Error(`Unexpected URL ${url}`);
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-
-    try {
-      const status = await getLocalConnectionStatus(profile);
-      expect(status.connected).toBe(true);
-      expect(status.ebayUsername).toBe("testuser_refresh");
-      expect(fetchMock).toHaveBeenCalledTimes(5);
-
-      const persisted = loadBackendProfiles()[0];
-      expect(persisted?.ebaySession?.accessToken).toBe("fresh-access-token");
-      expect(persisted?.ebaySession?.refreshToken).toBe("refresh-token-2");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("preserves the prior refresh token when eBay omits a new one during direct refresh", async () => {
-    const dir = useIsolatedConfigHome();
-
-    const profile = upsertBackendProfile({
-      name: "default",
-      selfManagedApp: {
-        environment: "sandbox",
-        clientId: "sandbox-client-id",
-        clientSecret: "sandbox-client-secret",
-        runame: "sandbox-runame",
-        privacyPolicyUrl: "https://example.test/privacy",
-        acceptedUrl: "https://example.test/auth/success",
-        declinedUrl: "https://example.test/auth/declined"
-      },
-      ebaySession: {
-        environment: "sandbox",
-        marketplaceId: "EBAY_US",
-        accessToken: "expired-access-token",
-        refreshToken: "refresh-token-1",
-        accessTokenExpiresAtUtc: "2000-01-01T00:00:00Z"
-      },
-      outputFormat: "json"
-    });
-
-    const fetchMock = vi.fn(async (url: string) => {
-      if (url.endsWith("/identity/v1/oauth2/token")) {
-        return new Response(
-          JSON.stringify({
-            access_token: "fresh-access-token",
-            expires_in: 7200,
-            token_type: "User Access Token"
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      if (url.endsWith("/commerce/identity/v1/user/")) {
-        return new Response(
-          JSON.stringify({
-            userId: "user-123",
-            username: "testuser_refresh"
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      if (url.endsWith("/sell/account/v1/privilege")) {
-        return new Response(
-          JSON.stringify({ sellerRegistrationCompleted: true }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      throw new Error(`Unexpected URL ${url}`);
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-
-    try {
-      const status = await getLocalConnectionStatus(profile);
-      expect(status.connected).toBe(true);
-      const persisted = loadBackendProfiles()[0];
-      expect(persisted?.ebaySession?.accessToken).toBe("fresh-access-token");
-      expect(persisted?.ebaySession?.refreshToken).toBe("refresh-token-1");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
   });
 
   it("uses the backend relay for refresh without local app credentials", async () => {
@@ -580,21 +345,58 @@ describe("local eBay session flows", () => {
     }
   });
 
+  it("clears the local seller session when the backend reports revoked auth", async () => {
+    const dir = useIsolatedConfigHome();
 
-  it("persists local policy defaults and location defaults from direct eBay responses", async () => {
+    const profile = upsertBackendProfile({
+      name: "revoked-refresh",
+      backendBaseUrl: "https://backend.example.test",
+      ebaySession: {
+        environment: "production",
+        marketplaceId: "EBAY_US",
+        accessToken: "expired-access-token",
+        refreshToken: "revoked-refresh-token",
+        accessTokenExpiresAtUtc: "2000-01-01T00:00:00Z"
+      }
+    });
+
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe("https://backend.example.test/api/local/ebay/refresh");
+      return new Response(
+        JSON.stringify({
+          title: "local_ebay_auth_revoked",
+          detail: "The eBay authorization for this local seller session has been revoked or expired.",
+          status: 401
+        }),
+        { status: 401, headers: { "content-type": "application/problem+json" } }
+      );
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      let thrown: unknown;
+      try {
+        await getLocalConnectionStatus(profile);
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(AppError);
+      expect((thrown as AppError).code).toBe("AUTH_REVOKED");
+      expect(loadBackendProfiles()[0]?.ebaySession).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+
+  it("persists local policy defaults and location defaults from seller API responses", async () => {
     const dir = useIsolatedConfigHome();
 
     const profile = upsertBackendProfile({
       name: "default",
-      selfManagedApp: {
-        environment: "sandbox",
-        clientId: "sandbox-client-id",
-        clientSecret: "sandbox-client-secret",
-        runame: "sandbox-runame",
-        privacyPolicyUrl: "https://example.test/privacy",
-        acceptedUrl: "https://example.test/auth/success",
-        declinedUrl: "https://example.test/auth/declined"
-      },
+      backendBaseUrl: "https://backend.example.test",
       ebaySession: {
         environment: "sandbox",
         marketplaceId: "EBAY_US",
@@ -666,15 +468,7 @@ describe("local eBay session flows", () => {
 
     const profile = upsertBackendProfile({
       name: "default",
-      selfManagedApp: {
-        environment: "production",
-        clientId: "prod-client-id",
-        clientSecret: "prod-client-secret",
-        runame: "prod-runame",
-        privacyPolicyUrl: "https://example.test/privacy",
-        acceptedUrl: "https://example.test/auth/success",
-        declinedUrl: "https://example.test/auth/declined"
-      },
+      backendBaseUrl: "https://backend.example.test",
       ebaySession: {
         environment: "production",
         marketplaceId: "EBAY_US",
@@ -717,124 +511,12 @@ describe("local eBay session flows", () => {
     }
   });
 
-  it("falls back to Browse detail when Trading GetItem fails for a legacy listing", async () => {
-    const dir = useIsolatedConfigHome();
-
-    const profile = upsertBackendProfile({
-      name: "default",
-      selfManagedApp: {
-        environment: "production",
-        clientId: "prod-client-id",
-        clientSecret: "prod-client-secret",
-        runame: "prod-runame",
-        privacyPolicyUrl: "https://example.test/privacy",
-        acceptedUrl: "https://example.test/auth/success",
-        declinedUrl: "https://example.test/auth/declined"
-      },
-      ebaySession: {
-        environment: "production",
-        marketplaceId: "EBAY_US",
-        accessToken: "user-access-token",
-        refreshToken: "refresh-token",
-        accessTokenExpiresAtUtc: "2099-01-01T00:00:00Z"
-      },
-      outputFormat: "json"
-    });
-
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === "https://api.ebay.com/sell/inventory/v1/listing/276784478357") {
-        return new Response(
-          JSON.stringify({ errors: [{ message: "Not found" }] }),
-          { status: 404, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      if (url === "https://api.ebay.com/ws/api.dll") {
-        expect((init?.headers as Record<string, string> | undefined)?.["X-EBAY-API-CALL-NAME"]).toBe("GetItem");
-        return new Response(
-          [
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
-            "<GetItemResponse xmlns=\"urn:ebay:apis:eBLBaseComponents\">",
-            "<Ack>Failure</Ack>",
-            "<Errors>",
-            "<ShortMessage>XML Parse error.</ShortMessage>",
-            "<LongMessage>XML Parse error.</LongMessage>",
-            "</Errors>",
-            "</GetItemResponse>"
-          ].join(""),
-          { status: 200, headers: { "content-type": "text/xml" } }
-        );
-      }
-
-      if (url === "https://api.ebay.com/identity/v1/oauth2/token") {
-        return new Response(
-          JSON.stringify({
-            access_token: "app-access-token",
-            expires_in: 7200,
-            token_type: "Application Access Token"
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      if (url === "https://api.ebay.com/buy/browse/v1/item/get_item_by_legacy_id?legacy_item_id=276784478357") {
-        expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe("Bearer app-access-token");
-        return new Response(
-          JSON.stringify({
-            title: "Browse fallback listing",
-            shortDescription: "Recovered through Browse",
-            price: { value: "250.00", currency: "USD" },
-            categoryIdPath: "1|2|261328",
-            conditionId: "4000",
-            condition: "Ungraded",
-            image: { imageUrl: "https://example.test/image-1.jpg" },
-            itemCreationDate: "2024-12-19T02:44:12.000Z",
-            estimatedAvailabilities: [{ estimatedAvailabilityStatus: "IN_STOCK", estimatedRemainingQuantity: 1, estimatedSoldQuantity: 0 }]
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      }
-
-      throw new Error(`Unexpected URL ${url}`);
-    });
-
-    vi.stubGlobal("fetch", fetchMock);
-
-    try {
-      const listing = await getLocalListing(profile, "276784478357");
-      expect(listing).toEqual(expect.objectContaining({
-        aggregate: expect.objectContaining({
-          Source: "TRADING",
-          LegacyItem: expect.objectContaining({
-            detailSource: "BROWSE",
-            title: "Browse fallback listing"
-          })
-        }),
-        spec: expect.objectContaining({
-          title: "Browse fallback listing",
-          description: "Recovered through Browse",
-          categoryId: "261328"
-        })
-      }));
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
   it("plans Trading create actions when the draft requests Trading write path", async () => {
     const dir = useIsolatedConfigHome();
 
     const profile = upsertBackendProfile({
       name: "default",
-      selfManagedApp: {
-        environment: "production",
-        clientId: "prod-client-id",
-        clientSecret: "prod-client-secret",
-        runame: "prod-runame",
-        privacyPolicyUrl: "https://example.test/privacy",
-        acceptedUrl: "https://example.test/auth/success",
-        declinedUrl: "https://example.test/auth/declined"
-      },
+      backendBaseUrl: "https://backend.example.test",
       ebaySession: {
         environment: "production",
         marketplaceId: "EBAY_US",

@@ -731,7 +731,10 @@ public sealed class EbayMarketplaceGateway(
                         attempt,
                         payload);
                     response.Dispose();
-                    throw new InvalidOperationException($"eBay API request failed ({(int)response.StatusCode}): {payload}");
+                    throw new EbayApiException(
+                        response.StatusCode,
+                        payload,
+                        $"eBay API request failed ({(int)response.StatusCode}).");
                 }
 
                 logger.LogWarning(

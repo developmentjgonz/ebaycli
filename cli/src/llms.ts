@@ -7,7 +7,7 @@ export function buildCliLlmsText(): string {
 - the backend exchanges and refreshes eBay tokens for the configured deployment
 - the CLI stores the eBay OAuth session locally
 - the \`.NET\` backend in this repo is the reference relay implementation for privacy/auth landing pages and other server-side eBay surfaces
-- direct local eBay app credentials are an advanced fallback, not the recommended production path
+- direct local eBay app credentials are not supported by the CLI
 
 ## Runtime discovery
 

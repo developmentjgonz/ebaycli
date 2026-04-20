@@ -63,7 +63,7 @@ Notes:
 
 - `backendBaseUrl` is required for the recommended production flow
 - eBay app credentials live in backend configuration, not in the normal CLI profile
-- `selfManagedApp` remains only as an advanced direct/private testing fallback
+- direct eBay app credential configuration is not supported by the CLI
 
 ## End-to-end auth flow
 

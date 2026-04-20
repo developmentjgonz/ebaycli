@@ -67,13 +67,13 @@ function buildOverviewGuide() {
   return {
     model: "backend-relay-local-cli",
     summary:
-      "The CLI stores the eBay seller session locally and keeps listing/setup logic local. Production OAuth uses a backend relay because eBay requires a public HTTPS redirect URL; direct CLI app credentials remain an advanced fallback.",
+      "The CLI stores the eBay seller session locally and keeps listing/setup logic local. Production OAuth uses a backend relay because eBay requires a public HTTPS redirect URL.",
     authModel: {
       mode: "backend-relay",
       setup: [
         "Run `ebay config set --backend-url https://your-backend.example.com --json`.",
         "Run `ebay auth login --environment production --json` and complete the eBay consent flow.",
-        "Use `ebay config auth --client-id ... --client-secret ... --runame ...` only for advanced direct/private testing."
+        "Do not configure eBay app credentials in the CLI; the backend owns OAuth credentials and callback handling."
       ]
     },
     topics: ["capabilities", "workflows", "listing-spec", "agent-notes"],
@@ -99,10 +99,6 @@ function buildCapabilitiesGuide() {
         command: "ebay config set --backend-url <url>",
         purpose: "Set the production backend relay URL used for eBay OAuth callback, token exchange, privacy, and required hosted surfaces."
       },
-      {
-        command: "ebay config auth --client-id ... --client-secret ... --runame ... --environment production",
-        purpose: "Advanced fallback: store direct eBay app credentials locally for private testing without a backend relay."
-      }
     ],
     auth: [
       {

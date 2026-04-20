@@ -61,14 +61,6 @@ function getGlobalOptions(command: Command): GlobalOptions {
 export function redactProfileForOutput(profile: ReturnType<typeof resolveBackendProfile>) {
   return {
     ...profile,
-    ...(profile.selfManagedApp
-      ? {
-          selfManagedApp: {
-            ...profile.selfManagedApp,
-            clientSecret: "***redacted***"
-          }
-        }
-      : {}),
     ...(profile.ebaySession
       ? {
           ebaySession: {
@@ -141,35 +133,6 @@ export function createCli(): Command {
         ...(options.backendUrl ? { backendBaseUrl: options.backendUrl } : {})
       });
       renderResult(profile, Boolean(global.json));
-    });
-
-  config
-    .command("auth")
-    .description("Configure advanced direct eBay app credentials for this profile")
-    .requiredOption("--client-id <clientId>")
-    .requiredOption("--client-secret <clientSecret>")
-    .requiredOption("--runame <runame>")
-    .option("--environment <environment>", "production or sandbox", "production")
-    .option("--privacy-policy-url <url>")
-    .option("--accepted-url <url>")
-    .option("--declined-url <url>")
-    .action(async (options, command: Command) => {
-      const global = getGlobalOptions(command);
-      const existingProfile = resolveBackendProfile(global.profile);
-      const authSiteBaseUrl = existingProfile.backendBaseUrl?.replace(/\/$/, "");
-      const profile = upsertBackendProfile({
-        name: global.profile,
-        selfManagedApp: {
-          environment: options.environment,
-          clientId: options.clientId,
-          clientSecret: options.clientSecret,
-          runame: options.runame,
-          ...(options.privacyPolicyUrl ? { privacyPolicyUrl: options.privacyPolicyUrl } : authSiteBaseUrl ? { privacyPolicyUrl: `${authSiteBaseUrl}/privacy` } : {}),
-          ...(options.acceptedUrl ? { acceptedUrl: options.acceptedUrl } : authSiteBaseUrl ? { acceptedUrl: `${authSiteBaseUrl}/auth/success` } : {}),
-          ...(options.declinedUrl ? { declinedUrl: options.declinedUrl } : authSiteBaseUrl ? { declinedUrl: `${authSiteBaseUrl}/auth/declined` } : {})
-        }
-      });
-      renderResult(redactProfileForOutput(profile), Boolean(global.json));
     });
 
   config
@@ -407,10 +370,9 @@ export function createCli(): Command {
 export function buildConfigStatusForOutput(profile: ReturnType<typeof resolveBackendProfile>) {
   const configured = {
     backendBaseUrl: Boolean(profile.backendBaseUrl),
-    selfManagedApp: Boolean(profile.selfManagedApp),
     ebaySession: Boolean(profile.ebaySession)
   };
-  const guidance = !profile.backendBaseUrl && !profile.selfManagedApp
+  const guidance = !profile.backendBaseUrl
     ? buildBootstrapGuidance(profile, "missing_backend_url")
     : !profile.ebaySession
       ? buildBootstrapGuidance(profile, "missing_ebay_session")
@@ -419,10 +381,10 @@ export function buildConfigStatusForOutput(profile: ReturnType<typeof resolveBac
   return {
     profile: redactProfileForOutput(profile),
     setup: {
-      authMode: profile.backendBaseUrl ? "backend-relay" : profile.selfManagedApp ? "direct" : "unconfigured",
+      authMode: profile.backendBaseUrl ? "backend-relay" : "unconfigured",
       configured,
-      readyForLogin: configured.backendBaseUrl || configured.selfManagedApp,
-      readyForOperations: (configured.backendBaseUrl || configured.selfManagedApp) && configured.ebaySession,
+      readyForLogin: configured.backendBaseUrl,
+      readyForOperations: configured.backendBaseUrl && configured.ebaySession,
       ...(guidance ? { nextCommands: guidance.nextCommands, notes: guidance.notes, docs: guidance.docs } : {})
     }
   };

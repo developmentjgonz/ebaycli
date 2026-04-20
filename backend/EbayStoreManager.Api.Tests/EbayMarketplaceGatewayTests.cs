@@ -372,6 +372,37 @@ public sealed class EbayMarketplaceGatewayTests
         Assert.NotNull(result["endTimeUtc"]?.GetValue<string>());
     }
 
+    [Fact]
+    public async Task RefreshAccessToken_WhenEbayReturnsInvalidGrant_ThrowsRevokedException()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent("{\"error\":\"invalid_grant\",\"error_description\":\"refresh token revoked\"}")
+        });
+        var gateway = CreateGateway(handler);
+        var environment = new EbayEnvironmentDescriptor(
+            "production",
+            "client",
+            "secret",
+            "runame",
+            "https://auth.example.com/oauth2",
+            "https://api.example.com",
+            "https://identity.example.com",
+            "https://media.example.com",
+            "https://api.example.com/ws/api.dll");
+
+        var exception = await Assert.ThrowsAsync<EbayApiException>(() =>
+            gateway.RefreshAccessTokenAsync(
+                environment,
+                "revoked-refresh-token",
+                ["https://api.ebay.com/oauth/api_scope"],
+                CancellationToken.None));
+
+        Assert.True(exception.IsAuthorizationRevoked);
+        Assert.Equal(HttpStatusCode.BadRequest, exception.StatusCode);
+        Assert.Contains("invalid_grant", exception.Payload);
+    }
+
     private sealed class SingleClientFactory(HttpClient client) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => client;

@@ -116,17 +116,7 @@ node dist/index.js config set --backend-url https://your-backend.example.com --j
 node dist/index.js config status --json
 ```
 
-Advanced direct/private testing can still configure eBay app credentials locally:
-
-```bash
-node dist/index.js config auth \
-  --client-id YOUR_CLIENT_ID \
-  --client-secret YOUR_CLIENT_SECRET \
-  --runame YOUR_RUNAME \
-  --environment production
-```
-
-For production relay mode, eBay app credentials live in backend configuration, not in the npm CLI profile. The backend must expose:
+eBay app credentials live in backend configuration, not in the npm CLI profile. The backend must expose:
 
 - privacy policy: `/privacy`
 - accepted URL: `/auth/success`
@@ -142,7 +132,7 @@ To remove access cleanly:
 
 ## Backend
 
-The backend lives in [../backend/EbayStoreManager.Api](../backend/EbayStoreManager.Api). In the public architecture it is an optional reference implementation for:
+The backend lives in [../backend/EbayStoreManager.Api](../backend/EbayStoreManager.Api). In the public architecture it is the reference relay implementation for:
 
 - hosting privacy/auth landing pages
 - server-side token exchange/refresh flows

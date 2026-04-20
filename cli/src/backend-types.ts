@@ -2,17 +2,6 @@ import { z } from "zod";
 
 import { DEFAULT_PROFILE } from "./constants.js";
 
-export const selfManagedAppSchema = z.object({
-  environment: z.enum(["production", "sandbox"]).default("production"),
-  clientId: z.string().min(1),
-  clientSecret: z.string().min(1),
-  runame: z.string().min(1),
-  privacyPolicyUrl: z.string().url().optional(),
-  acceptedUrl: z.string().url().optional(),
-  declinedUrl: z.string().url().optional()
-});
-export type SelfManagedApp = z.infer<typeof selfManagedAppSchema>;
-
 export const localEbaySessionSchema = z.object({
   environment: z.string(),
   marketplaceId: z.string(),
@@ -36,7 +25,6 @@ export type LocalEbaySession = z.infer<typeof localEbaySessionSchema>;
 export const backendProfileSchema = z.object({
   name: z.string().min(1).default(DEFAULT_PROFILE),
   backendBaseUrl: z.string().url().optional(),
-  selfManagedApp: selfManagedAppSchema.optional(),
   ebaySession: localEbaySessionSchema.optional(),
   outputFormat: z.enum(["text", "json"]).default("text")
 });

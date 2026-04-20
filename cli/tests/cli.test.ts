@@ -27,22 +27,16 @@ describe("CLI shape", () => {
     expect(cli.options.some((option) => option.long === "--version")).toBe(true);
   });
 
-  it("exposes the dual-mode auth config surface", () => {
+  it("exposes the relay-only config surface", () => {
     const cli = createCli();
     const config = cli.commands.find((command) => command.name() === "config");
     expect(config).toBeDefined();
-    expect(config?.commands.map((command) => command.name())).toEqual(["set", "auth", "status"]);
+    expect(config?.commands.map((command) => command.name())).toEqual(["set", "status"]);
   });
 
-  it("redacts both app secrets and stored session tokens in profile output", () => {
+  it("redacts stored session tokens in profile output", () => {
     const redacted = redactProfileForOutput({
       name: "default",
-      selfManagedApp: {
-        environment: "production",
-        clientId: "client-id",
-        clientSecret: "real-secret",
-        runame: "runame"
-      },
       ebaySession: {
         environment: "production",
         marketplaceId: "EBAY_US",
@@ -53,7 +47,6 @@ describe("CLI shape", () => {
       outputFormat: "json"
     });
 
-    expect(redacted.selfManagedApp?.clientSecret).toBe("***redacted***");
     expect(redacted.ebaySession?.accessToken).toBe("***redacted***");
     expect(redacted.ebaySession?.refreshToken).toBe("***redacted***");
   });
@@ -74,7 +67,6 @@ describe("CLI shape", () => {
           authMode: "unconfigured",
           configured: {
             backendBaseUrl: false,
-            selfManagedApp: false,
             ebaySession: false
           },
           readyForLogin: false,
@@ -89,7 +81,7 @@ describe("CLI shape", () => {
     );
   });
 
-  it("marks backend-relay profiles ready for login without direct app credentials", () => {
+  it("marks backend-relay profiles ready for login", () => {
     const output = buildConfigStatusForOutput({
       name: "default",
       backendBaseUrl: "https://backend.example.test",
@@ -102,7 +94,6 @@ describe("CLI shape", () => {
           authMode: "backend-relay",
           configured: {
             backendBaseUrl: true,
-            selfManagedApp: false,
             ebaySession: false
           },
           readyForLogin: true,

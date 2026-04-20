@@ -145,6 +145,12 @@ For production keysets, the marketplace account deletion webhook must also be co
 https://your-public-api-host/notifications/ebay/marketplace-account-deletion
 ```
 
+If authorization revocation notifications are enabled for the keyset, configure:
+
+```text
+https://your-public-api-host/notifications/ebay/authorization-revocation
+```
+
 For production OAuth/privacy configuration, the service can also publicly serve:
 
 ```text
@@ -225,6 +231,8 @@ curl -X POST http://localhost:5141/api/local/ebay/status \
 - `GET /oauth/ebay/callback`
 - `GET /notifications/ebay/marketplace-account-deletion`
 - `POST /notifications/ebay/marketplace-account-deletion`
+- `GET /notifications/ebay/authorization-revocation`
+- `POST /notifications/ebay/authorization-revocation`
 
 ## Operational hardening
 
