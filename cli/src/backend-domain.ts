@@ -130,6 +130,23 @@ export async function exchangeLocalEbayAuthorization(
 
 export async function refreshLocalEbaySession(profile: BackendProfile, session: LocalEbaySession): Promise<LocalEbaySession> {
   const app = requireSelfManagedApp(profile);
+  if (shouldUseBackendAuthRelay(profile, app)) {
+    return await postBackendJson<LocalEbaySession>(
+      profile,
+      "/api/local/ebay/refresh",
+      {
+        environment: session.environment,
+        marketplaceId: session.marketplaceId,
+        refreshToken: session.refreshToken,
+        refreshTokenExpiresAtUtc: session.refreshTokenExpiresAtUtc,
+        defaultPaymentPolicyId: session.defaultPaymentPolicyId,
+        defaultReturnPolicyId: session.defaultReturnPolicyId,
+        defaultFulfillmentPolicyId: session.defaultFulfillmentPolicyId,
+        defaultLocationKey: session.defaultLocationKey
+      }
+    );
+  }
+
   return await refreshSelfManagedSession(app, session);
 }
 
@@ -301,7 +318,7 @@ async function exchangeSelfManagedAuthorization(app: SelfManagedApp, code: strin
 async function refreshSelfManagedSession(app: SelfManagedApp, session: LocalEbaySession): Promise<LocalEbaySession> {
   const client = new EbayApiClient(resolveEbayEnvironment(app.environment));
   const tokenResponse = await client.refreshAccessToken(toAuthEnvironment(app, app.environment), session.refreshToken, DefaultScopes);
-  const refreshed = await buildSessionFromTokenResponse(client, app.environment, tokenResponse);
+  const refreshed = await buildSessionFromTokenResponse(client, app.environment, tokenResponse, { fallbackRefreshToken: session.refreshToken });
   return {
     ...refreshed,
     defaultPaymentPolicyId: session.defaultPaymentPolicyId,
@@ -314,10 +331,11 @@ async function refreshSelfManagedSession(app: SelfManagedApp, session: LocalEbay
 async function buildSessionFromTokenResponse(
   client: EbayApiClient,
   environment: string,
-  tokenResponse: Record<string, unknown>
+  tokenResponse: Record<string, unknown>,
+  options?: { fallbackRefreshToken?: string }
 ): Promise<LocalEbaySession> {
   const accessToken = optionalString(tokenResponse.access_token);
-  const refreshToken = optionalString(tokenResponse.refresh_token);
+  const refreshToken = optionalString(tokenResponse.refresh_token) ?? options?.fallbackRefreshToken;
   if (!accessToken || !refreshToken) {
     throw new AppError("AUTH_CODE_MISSING", "eBay token response did not include both access and refresh tokens.", tokenResponse);
   }

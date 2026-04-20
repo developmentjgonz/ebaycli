@@ -416,9 +416,13 @@ export async function runCli(argv = process.argv): Promise<void> {
     await program.parseAsync(argv);
   } catch (error) {
     if (error instanceof AppError) {
-      process.stderr.write(`${error.code}: ${error.message}\n`);
-      if (error.details !== undefined) {
-        process.stderr.write(`${JSON.stringify(error.details, null, 2)}\n`);
+      if (shouldRenderErrorAsJson(argv)) {
+        process.stderr.write(`${JSON.stringify({ error: serializeAppError(error) }, null, 2)}\n`);
+      } else {
+        process.stderr.write(`${error.code}: ${error.message}\n`);
+        if (error.details !== undefined) {
+          process.stderr.write(`${JSON.stringify(error.details, null, 2)}\n`);
+        }
       }
       process.exitCode = error.exitCode;
       return;
@@ -431,4 +435,16 @@ export async function runCli(argv = process.argv): Promise<void> {
     }
     process.exitCode = 1;
   }
+}
+
+function shouldRenderErrorAsJson(argv: string[]): boolean {
+  return argv.includes("--json");
+}
+
+function serializeAppError(error: AppError): { code: string; message: string; details?: unknown } {
+  return {
+    code: error.code,
+    message: error.message,
+    ...(error.details !== undefined ? { details: error.details } : {})
+  };
 }

@@ -15,7 +15,14 @@ import {
   parseListingSpecFile,
   syncLocalPolicies
 } from "../src/backend-domain.js";
-import { loadBackendProfiles, upsertBackendProfile } from "../src/backend-config.js";
+import {
+  loadBackendProfiles,
+  requireConfiguredBackendProfile,
+  requireLocalEbaySession,
+  requireSelfManagedApp,
+  upsertBackendProfile
+} from "../src/backend-config.js";
+import { AppError } from "../src/errors.js";
 
 const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
 
@@ -104,6 +111,128 @@ describe("parseListingPatchFile", () => {
       expect(parsed.priceValue).toBe(84.99);
       expect(parsed.priceCurrency).toBe("USD");
       expect(parsed.availableQuantity).toBe(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("bootstrap guidance", () => {
+  it("explains the production bootstrap path from an empty profile", () => {
+    const dir = useIsolatedConfigHome();
+
+    try {
+      let thrown: unknown;
+      try {
+        requireConfiguredBackendProfile();
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(AppError);
+      const error = thrown as AppError;
+      expect(error.code).toBe("CONFIG_ERROR");
+      expect(error.message).toContain("profile 'default'");
+      expect(error.details).toEqual(
+        expect.objectContaining({
+          profile: "default",
+          issue: "missing_app_credentials",
+          mode: "unconfigured",
+          configured: {
+            backendBaseUrl: false,
+            selfManagedApp: false,
+            ebaySession: false
+          },
+          nextCommands: [
+            "ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment production",
+            "ebay auth login --environment production",
+            "ebay status --json"
+          ],
+          docs: expect.arrayContaining(["README.md", "cli/README.md"])
+        })
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not treat the companion backend relay as a replacement for user-owned app credentials", () => {
+    const dir = useIsolatedConfigHome();
+    const profile = upsertBackendProfile({
+      name: "relay-only",
+      backendBaseUrl: "https://backend.example.test"
+    });
+
+    try {
+      let thrown: unknown;
+      try {
+        requireSelfManagedApp(profile);
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(AppError);
+      const error = thrown as AppError;
+      expect(error.code).toBe("CONFIG_ERROR");
+      expect(error.details).toEqual(
+        expect.objectContaining({
+          profile: "relay-only",
+          issue: "missing_app_credentials",
+          mode: "companion-backend-relay",
+          configured: {
+            backendBaseUrl: true,
+            selfManagedApp: false,
+            ebaySession: false
+          },
+          notes: expect.arrayContaining([
+            "The optional backend is only a companion relay/site for OAuth callback, privacy, and health surfaces; it is not a shared public auth mode."
+          ])
+        })
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("guides configured profiles to login when no eBay seller session exists", () => {
+    const dir = useIsolatedConfigHome();
+    const profile = upsertBackendProfile({
+      name: "configured",
+      selfManagedApp: {
+        environment: "sandbox",
+        clientId: "sandbox-client-id",
+        clientSecret: "sandbox-client-secret",
+        runame: "sandbox-runame"
+      }
+    });
+
+    try {
+      let thrown: unknown;
+      try {
+        requireLocalEbaySession(profile);
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(AppError);
+      const error = thrown as AppError;
+      expect(error.code).toBe("AUTH_REQUIRED");
+      expect(error.details).toEqual(
+        expect.objectContaining({
+          profile: "configured",
+          issue: "missing_ebay_session",
+          mode: "self-managed",
+          configured: {
+            backendBaseUrl: false,
+            selfManagedApp: true,
+            ebaySession: false
+          },
+          nextCommands: [
+            "ebay auth login --environment sandbox",
+            "ebay status --json"
+          ]
+        })
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -304,6 +433,175 @@ describe("local eBay session flows", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("preserves the prior refresh token when eBay omits a new one during direct refresh", async () => {
+    const dir = useIsolatedConfigHome();
+
+    const profile = upsertBackendProfile({
+      name: "default",
+      selfManagedApp: {
+        environment: "sandbox",
+        clientId: "sandbox-client-id",
+        clientSecret: "sandbox-client-secret",
+        runame: "sandbox-runame",
+        privacyPolicyUrl: "https://example.test/privacy",
+        acceptedUrl: "https://example.test/auth/success",
+        declinedUrl: "https://example.test/auth/declined"
+      },
+      ebaySession: {
+        environment: "sandbox",
+        marketplaceId: "EBAY_US",
+        accessToken: "expired-access-token",
+        refreshToken: "refresh-token-1",
+        accessTokenExpiresAtUtc: "2000-01-01T00:00:00Z"
+      },
+      outputFormat: "json"
+    });
+
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/identity/v1/oauth2/token")) {
+        return new Response(
+          JSON.stringify({
+            access_token: "fresh-access-token",
+            expires_in: 7200,
+            token_type: "User Access Token"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith("/commerce/identity/v1/user/")) {
+        return new Response(
+          JSON.stringify({
+            userId: "user-123",
+            username: "testuser_refresh"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith("/sell/account/v1/privilege")) {
+        return new Response(
+          JSON.stringify({ sellerRegistrationCompleted: true }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const status = await getLocalConnectionStatus(profile);
+      expect(status.connected).toBe(true);
+      const persisted = loadBackendProfiles()[0];
+      expect(persisted?.ebaySession?.accessToken).toBe("fresh-access-token");
+      expect(persisted?.ebaySession?.refreshToken).toBe("refresh-token-1");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the backend relay for refresh when the companion backend owns token pass-through", async () => {
+    const dir = useIsolatedConfigHome();
+
+    const profile = upsertBackendProfile({
+      name: "relay-refresh",
+      backendBaseUrl: "https://backend.example.test",
+      selfManagedApp: {
+        environment: "sandbox",
+        clientId: "sandbox-client-id",
+        clientSecret: "sandbox-client-secret",
+        runame: "sandbox-runame",
+        privacyPolicyUrl: "https://backend.example.test/privacy",
+        acceptedUrl: "https://backend.example.test/auth/success",
+        declinedUrl: "https://backend.example.test/auth/declined"
+      },
+      ebaySession: {
+        environment: "sandbox",
+        marketplaceId: "EBAY_US",
+        accessToken: "expired-access-token",
+        refreshToken: "refresh-token-1",
+        accessTokenExpiresAtUtc: "2000-01-01T00:00:00Z",
+        defaultPaymentPolicyId: "payment-1",
+        defaultReturnPolicyId: "return-1",
+        defaultFulfillmentPolicyId: "fulfillment-1",
+        defaultLocationKey: "warehouse-a"
+      },
+      outputFormat: "json"
+    });
+
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://backend.example.test/api/local/ebay/refresh") {
+        expect(init?.method).toBe("POST");
+        expect(JSON.parse(String(init?.body))).toEqual({
+          environment: "sandbox",
+          marketplaceId: "EBAY_US",
+          refreshToken: "refresh-token-1",
+          refreshTokenExpiresAtUtc: undefined,
+          defaultPaymentPolicyId: "payment-1",
+          defaultReturnPolicyId: "return-1",
+          defaultFulfillmentPolicyId: "fulfillment-1",
+          defaultLocationKey: "warehouse-a"
+        });
+        return new Response(
+          JSON.stringify({
+            environment: "sandbox",
+            marketplaceId: "EBAY_US",
+            accessToken: "backend-access-token",
+            refreshToken: "refresh-token-1",
+            accessTokenExpiresAtUtc: "2099-01-01T00:00:00Z",
+            ebayUsername: "testuser_refresh",
+            sellerRegistrationCompleted: true,
+            defaultPaymentPolicyId: "payment-1",
+            defaultReturnPolicyId: "return-1",
+            defaultFulfillmentPolicyId: "fulfillment-1",
+            defaultLocationKey: "warehouse-a"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith("/commerce/identity/v1/user/")) {
+        expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe("Bearer backend-access-token");
+        return new Response(
+          JSON.stringify({
+            userId: "user-123",
+            username: "testuser_refresh"
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.endsWith("/sell/account/v1/privilege")) {
+        expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe("Bearer backend-access-token");
+        return new Response(
+          JSON.stringify({ sellerRegistrationCompleted: true }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const status = await getLocalConnectionStatus(profile);
+      expect(status.connected).toBe(true);
+      expect(status.ebayUsername).toBe("testuser_refresh");
+
+      const persisted = loadBackendProfiles()[0];
+      expect(persisted?.ebaySession?.accessToken).toBe("backend-access-token");
+      expect(persisted?.ebaySession?.refreshToken).toBe("refresh-token-1");
+      expect(persisted?.ebaySession?.defaultPaymentPolicyId).toBe("payment-1");
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
 
   it("persists local policy defaults and location defaults from direct eBay responses", async () => {
     const dir = useIsolatedConfigHome();

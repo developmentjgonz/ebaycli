@@ -1,6 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { createCli, redactProfileForOutput } from "../src/cli.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { createCli, redactProfileForOutput, runCli } from "../src/cli.js";
+
+const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
+const originalExitCode = process.exitCode;
+
+afterEach(() => {
+  if (originalXdgConfigHome === undefined) {
+    delete process.env.XDG_CONFIG_HOME;
+  } else {
+    process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
+  }
+  process.exitCode = originalExitCode;
+  vi.restoreAllMocks();
+});
 
 describe("CLI shape", () => {
   it("registers the public top-level commands for the local-session product", () => {
@@ -38,5 +55,32 @@ describe("CLI shape", () => {
     expect(redacted.selfManagedApp?.clientSecret).toBe("***redacted***");
     expect(redacted.ebaySession?.accessToken).toBe("***redacted***");
     expect(redacted.ebaySession?.refreshToken).toBe("***redacted***");
+  });
+
+  it("emits a single machine-readable error envelope in JSON mode", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ebaycli-cli-config-"));
+    process.env.XDG_CONFIG_HOME = dir;
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    try {
+      await runCli(["node", "ebay", "status", "--json"]);
+      const output = stderr.mock.calls.map((call) => String(call[0])).join("");
+      const parsed = JSON.parse(output) as {
+        error: {
+          code: string;
+          details: {
+            issue: string;
+            nextCommands: string[];
+          };
+        };
+      };
+
+      expect(process.exitCode).toBe(1);
+      expect(parsed.error.code).toBe("CONFIG_ERROR");
+      expect(parsed.error.details.issue).toBe("missing_app_credentials");
+      expect(parsed.error.details.nextCommands).toContain("ebay status --json");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
