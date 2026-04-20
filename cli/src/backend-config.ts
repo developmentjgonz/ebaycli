@@ -10,12 +10,12 @@ interface ProfilesFile {
   profiles: BackendProfile[];
 }
 
-export type BootstrapIssue = "missing_app_credentials" | "missing_ebay_session";
+export type BootstrapIssue = "missing_backend_url" | "missing_app_credentials" | "missing_ebay_session";
 
 export interface BootstrapGuidance {
   profile: string;
   issue: BootstrapIssue;
-  mode: "self-managed" | "companion-backend-relay" | "unconfigured";
+  mode: "backend-relay" | "direct" | "unconfigured";
   configured: {
     backendBaseUrl: boolean;
     selfManagedApp: boolean;
@@ -93,11 +93,11 @@ export function resolveBackendProfile(name = DEFAULT_PROFILE): BackendProfile {
 
 export function requireConfiguredBackendProfile(name = DEFAULT_PROFILE): BackendProfile {
   const profile = resolveBackendProfile(name);
-  if (!profile.selfManagedApp) {
+  if (!profile.backendBaseUrl && !profile.selfManagedApp) {
     throw new AppError(
       "CONFIG_ERROR",
-      `eBay app credentials are not configured for profile '${profile.name}'. Run \`ebay config auth --client-id ... --client-secret ... --runame ... --environment production\`, then \`ebay auth login --environment production\`.`,
-      buildBootstrapGuidance(profile, "missing_app_credentials")
+      `No eBay auth path is configured for profile '${profile.name}'. Run \`ebay config set --backend-url https://your-backend.example.com\`, then \`ebay auth login --environment production\`.`,
+      buildBootstrapGuidance(profile, "missing_backend_url")
     );
   }
 
@@ -138,7 +138,7 @@ export function requireSelfManagedApp(profile: BackendProfile): SelfManagedApp {
   if (!profile.selfManagedApp) {
     throw new AppError(
       "CONFIG_ERROR",
-      `This profile does not have eBay app credentials configured. Run \`ebay config auth --client-id ... --client-secret ... --runame ... --environment production\`.`,
+      `This direct-auth operation requires eBay app credentials. Prefer backend relay with \`ebay config set --backend-url https://your-backend.example.com\`, or configure direct auth with \`ebay config auth --client-id ... --client-secret ... --runame ... --environment production\`.`,
       buildBootstrapGuidance(profile, "missing_app_credentials")
     );
   }
@@ -154,31 +154,18 @@ export function buildBootstrapGuidance(profile: BackendProfile, issue: Bootstrap
     ebaySession: Boolean(profile.ebaySession)
   };
 
-  const nextCommands =
-    issue === "missing_app_credentials"
-      ? [
-          "ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment production",
-          "ebay auth login --environment production",
-          "ebay status --json"
-        ]
-      : [
-          `ebay auth login --environment ${environment}`,
-          "ebay status --json"
-        ];
+  const nextCommands = buildNextCommands(profile, issue, environment);
 
   const notes = [
-    "The CLI is self-managed: each user supplies their own eBay developer app credentials.",
-    "The optional backend is only a companion relay/site for OAuth callback, privacy, and health surfaces; it is not a shared public auth mode."
+    "Production OAuth uses the backend relay because eBay requires a public HTTPS redirect URL.",
+    "The backend owns the eBay app credentials for this deployment; the CLI stores the local seller session after login.",
+    "Direct CLI eBay app credentials are an advanced fallback for private/local testing, not the recommended production path."
   ];
-
-  if (!profile.backendBaseUrl) {
-    notes.push("If using the reference backend for OAuth callback relay, set it first with `ebay config set --backend-url https://your-backend.example.com`.");
-  }
 
   return {
     profile: profile.name,
     issue,
-    mode: profile.backendBaseUrl ? "companion-backend-relay" : profile.selfManagedApp ? "self-managed" : "unconfigured",
+    mode: profile.backendBaseUrl ? "backend-relay" : profile.selfManagedApp ? "direct" : "unconfigured",
     configured,
     nextCommands,
     notes,
@@ -189,4 +176,34 @@ export function buildBootstrapGuidance(profile: BackendProfile, issue: Bootstrap
       "docs/bootstrap-profile-spec.md"
     ]
   };
+}
+
+function buildNextCommands(profile: BackendProfile, issue: BootstrapIssue, environment: string): string[] {
+  if (issue === "missing_ebay_session") {
+    return [
+      `ebay auth login --environment ${environment} --json`,
+      "ebay status --json"
+    ];
+  }
+
+  if (issue === "missing_app_credentials" && !profile.backendBaseUrl) {
+    return [
+      "ebay config set --backend-url https://your-backend.example.com --json",
+      "ebay auth login --environment production --json",
+      "ebay status --json"
+    ];
+  }
+
+  if (issue === "missing_app_credentials" && profile.backendBaseUrl) {
+    return [
+      "ebay auth login --environment production --json",
+      "ebay status --json"
+    ];
+  }
+
+  return [
+    "ebay config set --backend-url https://your-backend.example.com --json",
+    "ebay auth login --environment production --json",
+    "ebay status --json"
+  ];
 }

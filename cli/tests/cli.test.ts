@@ -71,6 +71,7 @@ describe("CLI shape", () => {
           outputFormat: "text"
         },
         setup: expect.objectContaining({
+          authMode: "unconfigured",
           configured: {
             backendBaseUrl: false,
             selfManagedApp: false,
@@ -79,8 +80,35 @@ describe("CLI shape", () => {
           readyForLogin: false,
           readyForOperations: false,
           nextCommands: [
-            "ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment production",
-            "ebay auth login --environment production",
+            "ebay config set --backend-url https://your-backend.example.com --json",
+            "ebay auth login --environment production --json",
+            "ebay status --json"
+          ]
+        })
+      })
+    );
+  });
+
+  it("marks backend-relay profiles ready for login without direct app credentials", () => {
+    const output = buildConfigStatusForOutput({
+      name: "default",
+      backendBaseUrl: "https://backend.example.test",
+      outputFormat: "text"
+    });
+
+    expect(output).toEqual(
+      expect.objectContaining({
+        setup: expect.objectContaining({
+          authMode: "backend-relay",
+          configured: {
+            backendBaseUrl: true,
+            selfManagedApp: false,
+            ebaySession: false
+          },
+          readyForLogin: true,
+          readyForOperations: false,
+          nextCommands: [
+            "ebay auth login --environment production --json",
             "ebay status --json"
           ]
         })
@@ -108,7 +136,7 @@ describe("CLI shape", () => {
 
       expect(process.exitCode).toBe(1);
       expect(parsed.error.code).toBe("CONFIG_ERROR");
-      expect(parsed.error.details.issue).toBe("missing_app_credentials");
+      expect(parsed.error.details.issue).toBe("missing_backend_url");
       expect(parsed.error.details.nextCommands).toContain("ebay status --json");
     } finally {
       rmSync(dir, { recursive: true, force: true });

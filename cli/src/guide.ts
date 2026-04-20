@@ -65,21 +65,21 @@ function normalizeTopic(topic?: string): GuideTopic {
 
 function buildOverviewGuide() {
   return {
-    model: "self-managed-local-cli",
+    model: "backend-relay-local-cli",
     summary:
-      "The CLI stores the eBay session locally, keeps listing/setup logic local, and uses only self-managed eBay app credentials. The optional .NET backend in the repo is a reference implementation for privacy/auth landing pages, token exchange hosting, and eBay-required server-side surfaces.",
+      "The CLI stores the eBay seller session locally and keeps listing/setup logic local. Production OAuth uses a backend relay because eBay requires a public HTTPS redirect URL; direct CLI app credentials remain an advanced fallback.",
     authModel: {
-      mode: "self-managed",
+      mode: "backend-relay",
       setup: [
-        "Run `ebay config auth --client-id ... --client-secret ... --runame ... --environment production`.",
-        "Run `ebay auth login --environment production` and complete the eBay consent flow.",
-        "Optional URLs default to the configured companion backend/site: `/privacy`, `/auth/success`, `/auth/declined`."
+        "Run `ebay config set --backend-url https://your-backend.example.com --json`.",
+        "Run `ebay auth login --environment production --json` and complete the eBay consent flow.",
+        "Use `ebay config auth --client-id ... --client-secret ... --runame ...` only for advanced direct/private testing."
       ]
     },
     topics: ["capabilities", "workflows", "listing-spec", "agent-notes"],
     coreCommands: [
-      "ebay config auth --client-id ... --client-secret ... --runame ...",
-      "ebay auth login --environment production",
+      "ebay config set --backend-url https://your-backend.example.com --json",
+      "ebay auth login --environment production --json",
       "ebay status --json",
       "ebay auth status --json",
       "ebay setup doctor --json",
@@ -97,17 +97,17 @@ function buildCapabilitiesGuide() {
     config: [
       {
         command: "ebay config set --backend-url <url>",
-        purpose: "Set the optional companion backend/site URL used to derive default privacy and auth landing page URLs."
+        purpose: "Set the production backend relay URL used for eBay OAuth callback, token exchange, privacy, and required hosted surfaces."
       },
       {
         command: "ebay config auth --client-id ... --client-secret ... --runame ... --environment production",
-        purpose: "Store the user-provided eBay app credentials in the local CLI profile."
+        purpose: "Advanced fallback: store direct eBay app credentials locally for private testing without a backend relay."
       }
     ],
     auth: [
       {
         command: "ebay auth login",
-        purpose: "Run eBay OAuth locally and store the refresh/access token in the selected CLI profile."
+        purpose: "Run eBay OAuth through the configured backend relay and store the returned seller session in the selected CLI profile."
       },
       {
         command: "ebay auth status",
@@ -185,8 +185,8 @@ function buildWorkflowGuide() {
   return {
     connect: {
       steps: [
-        "Run `ebay config auth --client-id ... --client-secret ... --runame ... --environment production` first.",
-        "Run `ebay auth login --environment production` and finish the eBay consent flow in the browser.",
+        "Run `ebay config set --backend-url https://your-backend.example.com --json` first.",
+        "Run `ebay auth login --environment production --json` and finish the eBay consent flow in the browser.",
         "Run `ebay status --json` to verify the local session and seller readiness in one call."
       ]
     },

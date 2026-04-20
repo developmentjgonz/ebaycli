@@ -1,16 +1,17 @@
 # ebaycli
 
-`ebaycli` is a self-managed local eBay CLI.
+`ebaycli` is a backend-relay local eBay CLI.
 
-- every user provides their own eBay app credentials
-- the CLI exchanges and refreshes user tokens directly with eBay
+- production OAuth uses a deployment-owned backend relay because eBay requires a public HTTPS redirect URL
+- the backend exchanges and refreshes eBay tokens for the configured deployment
 - the CLI stores the eBay OAuth session locally
-- the optional `.NET` backend in this repo is a reference implementation for privacy/auth landing pages and other server-side eBay surfaces
+- the `.NET` backend in this repo is the reference relay implementation for privacy/auth landing pages and other server-side eBay surfaces
+- direct local eBay app credentials are an advanced fallback, not the recommended production path
 
 ## Project status
 
 - Local eBay session stored in the CLI profile
-- Self-managed auth is the only public CLI mode
+- Backend-relayed OAuth is the recommended production CLI mode
 - No backend user-account or store-owner model in the active product path
 - Supports both eBay listing models:
   - Trading/classic listings for active and sold reads, legacy listing detail, and legacy update/end flows
@@ -29,10 +30,10 @@
 
 - `node dist/index.js guide --json`
   - Return machine-readable project guidance for agents
-- `node dist/index.js config auth --client-id ... --client-secret ... --runame ...`
-  - Configure the local CLI profile with the user's own eBay app credentials
-- `node dist/index.js auth login --environment production`
-  - Start local eBay OAuth and store the resulting session in the selected CLI profile
+- `node dist/index.js config set --backend-url https://your-backend.example.com --json`
+  - Configure the backend relay URL
+- `node dist/index.js auth login --environment production --json`
+  - Start backend-relayed eBay OAuth and store the resulting session in the selected CLI profile
 - `node dist/index.js auth status --json`
   - Show the connected eBay account
 - `node dist/index.js setup doctor --json`
@@ -77,7 +78,7 @@ Use those commands before drafting listing files or deciding whether a listing o
 - Agent guide surface: `/cli/src/guide.ts`
 - CLI runtime logic: `/cli/src/backend-domain.ts`
 - Local profile persistence: `/cli/src/backend-config.ts`
-- Optional reference backend routes: `/backend/EbayStoreManager.Api/Program.cs`
+- Backend relay routes: `/backend/EbayStoreManager.Api/Program.cs`
 - Local direct eBay client: `/cli/src/ebay-api.ts`
 - Local listing/setup engine: `/cli/src/ebay-engine.ts`
 

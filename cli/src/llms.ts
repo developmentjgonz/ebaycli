@@ -1,12 +1,13 @@
 export function buildCliLlmsText(): string {
   return `# ebaycli
 
-\`ebaycli\` is a self-managed local eBay CLI.
+\`ebaycli\` is a backend-relay local eBay CLI.
 
-- every user provides their own eBay app credentials
-- the CLI exchanges and refreshes user tokens directly with eBay
+- production OAuth uses a deployment-owned backend relay because eBay requires a public HTTPS redirect URL
+- the backend exchanges and refreshes eBay tokens for the configured deployment
 - the CLI stores the eBay OAuth session locally
-- the optional \`.NET\` backend in this repo is a reference implementation for privacy/auth landing pages and other server-side eBay surfaces
+- the \`.NET\` backend in this repo is the reference relay implementation for privacy/auth landing pages and other server-side eBay surfaces
+- direct local eBay app credentials are an advanced fallback, not the recommended production path
 
 ## Runtime discovery
 
@@ -23,10 +24,10 @@ The \`guide\` commands are the most authoritative interface for installed-cli be
 
 ## Commands
 
-- \`ebay config auth --client-id ... --client-secret ... --runame ...\`
-  - Configure the local CLI profile with the user's own eBay app credentials
-- \`ebay auth login --environment production\`
-  - Start local eBay OAuth and store the resulting session in the selected CLI profile
+- \`ebay config set --backend-url https://your-backend.example.com --json\`
+  - Configure the backend relay URL for eBay OAuth callback and token exchange
+- \`ebay auth login --environment production --json\`
+  - Start backend-relayed eBay OAuth and store the resulting session in the selected CLI profile
 - \`ebay status --json\`
   - Return a combined profile/config/auth/doctor snapshot for agent readiness checks
 - \`ebay auth status --json\`

@@ -1,14 +1,14 @@
 # EbayStoreManager.Api
 
-`EbayStoreManager.Api` is an optional reference backend for `ebaycli`.
+`EbayStoreManager.Api` is the reference backend relay for `ebaycli`.
 
 Primary responsibilities:
 
 - host public privacy and auth landing pages
-- demonstrate optional server-side OAuth callback and token handling
+- handle server-side OAuth callback and token exchange/refresh
 - expose the marketplace account deletion webhook
 
-The public CLI path is self-managed and stores the eBay session locally. This backend is useful for private deployments, self-hosting, and as an implementation reference for the eBay-required server-side surfaces.
+The production CLI path uses this backend relay because eBay requires a public HTTPS redirect URL. The CLI still stores the resulting seller session locally and performs listing workflows locally.
 
 ## Local run
 

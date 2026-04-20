@@ -1,11 +1,11 @@
 # ebaycli
 
-`ebaycli` is a self-managed local eBay CLI.
+`ebaycli` is a backend-relay local eBay CLI.
 
-- every user configures their own eBay app credentials locally
+- production OAuth uses a deployment-owned backend relay because eBay requires a public HTTPS redirect URL
 - the local CLI owns the eBay OAuth session for the current machine
 - listing and seller workflow logic live in the CLI
-- the `.NET` backend in this repo is an optional reference implementation, not the default product dependency
+- the `.NET` backend in this repo is the reference relay implementation
 
 ## CLI quick start
 
@@ -16,11 +16,8 @@ npm install
 npm run build
 
 node dist/index.js guide --json
-node dist/index.js config auth \
-  --client-id YOUR_CLIENT_ID \
-  --client-secret YOUR_CLIENT_SECRET \
-  --runame YOUR_RUNAME
-node dist/index.js auth login --environment sandbox
+node dist/index.js config set --backend-url https://your-backend.example.com --json
+node dist/index.js auth login --environment sandbox --json
 node dist/index.js status --json
 node dist/index.js auth status --json
 node dist/index.js auth disconnect --json
@@ -33,11 +30,8 @@ For a published install:
 ```bash
 npm install -g ebaycli
 ebay guide --json
-ebay config auth \
-  --client-id YOUR_CLIENT_ID \
-  --client-secret YOUR_CLIENT_SECRET \
-  --runame YOUR_RUNAME
-ebay auth login --environment production
+ebay config set --backend-url https://your-backend.example.com --json
+ebay auth login --environment production --json
 ebay status --json
 ```
 
@@ -89,7 +83,7 @@ The repository also ships a root [llms.txt](../llms.txt) file for monorepo disco
 
 ## Design docs
 
-- [docs/agent-first-architecture.md](../docs/agent-first-architecture.md) describes the self-managed public architecture and the role of the optional reference backend.
+- [docs/agent-first-architecture.md](../docs/agent-first-architecture.md) describes the backend-relay production architecture.
 
 ## Listing model support
 
@@ -103,7 +97,7 @@ The current support matrix is documented in [SUPPORT_MATRIX.md](SUPPORT_MATRIX.m
 
 ## Public service surfaces
 
-The optional backend/reference implementation exposes:
+The backend/reference relay exposes:
 
 - `/health`
 - `/ready`
@@ -115,14 +109,14 @@ The optional backend/reference implementation exposes:
 
 ## Config
 
-If you want to use the optional companion backend/site for privacy and auth landing pages, set it explicitly:
+Set the backend relay URL before login:
 
 ```bash
-node dist/index.js config set --backend-url https://your-backend.example.com
+node dist/index.js config set --backend-url https://your-backend.example.com --json
 node dist/index.js config status --json
 ```
 
-eBay app credentials are configured per local profile:
+Advanced direct/private testing can still configure eBay app credentials locally:
 
 ```bash
 node dist/index.js config auth \
@@ -132,11 +126,12 @@ node dist/index.js config auth \
   --environment production
 ```
 
-When you do not pass explicit URLs and you have configured an optional backend/site URL, the CLI derives these values from it:
+For production relay mode, eBay app credentials live in backend configuration, not in the npm CLI profile. The backend must expose:
 
 - privacy policy: `/privacy`
 - accepted URL: `/auth/success`
 - declined URL: `/auth/declined`
+- OAuth callback: `/oauth/ebay/callback`
 
 The CLI stores its local eBay session in the profile config file under `~/.config/ebaycli/backend-profiles.json` unless `XDG_CONFIG_HOME` is set.
 
@@ -150,9 +145,9 @@ To remove access cleanly:
 The backend lives in [../backend/EbayStoreManager.Api](../backend/EbayStoreManager.Api). In the public architecture it is an optional reference implementation for:
 
 - hosting privacy/auth landing pages
-- optional server-side token exchange/refresh flows
+- server-side token exchange/refresh flows
 - the marketplace account deletion webhook endpoint
 
-The CLI does not require this backend for the default self-managed path. Advanced users can self-host it or use it as an implementation reference.
+The CLI requires a backend relay for the recommended production path. Advanced users can self-host it or use it as an implementation reference.
 
 For backend setup and endpoints, see [backend/EbayStoreManager.Api/README.md](../backend/EbayStoreManager.Api/README.md).

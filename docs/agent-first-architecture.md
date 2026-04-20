@@ -3,22 +3,23 @@
 This repository now targets a single public product shape:
 
 - the CLI is the product
-- the CLI is self-managed
-- every user brings their own eBay app credentials
+- production OAuth uses a backend relay
+- each deployment brings its own eBay app credentials in backend configuration
 - the CLI stores OAuth session material locally
 - listing and seller workflow logic live in the CLI
-- the `.NET` backend in this repo is an optional reference implementation
+- the `.NET` backend in this repo is the reference relay implementation
 
 ## Why this model
 
-The original shared-app design was technically workable, but it created an avoidable policy risk for a public, scriptable CLI. A shared seller CLI can look like third parties are getting programmatic control over eBay through one application's credentials.
+The original direct-only CLI design is not the right production default because eBay OAuth requires a public HTTPS redirect URL. A normal installed CLI cannot reliably provide that URL on `localhost`.
 
-The self-managed model removes that ambiguity:
+The relay model keeps the CLI usable while preserving a clean product boundary:
 
-- each user owns their own eBay developer relationship
-- each user owns their own `Client ID`, `Client Secret`, and `RuName`
+- each deployment owns its eBay developer relationship
+- backend configuration owns `Client ID`, `Client Secret`, and `RuName`
 - the CLI remains agent-first and local
-- the repo can still include a backend example for teams that want hosted pages or server-side token handling
+- OAuth callback and token exchange happen on the backend
+- the CLI stores the returned seller session locally and performs listing workflows
 
 ## Public product boundary
 
@@ -26,21 +27,23 @@ The self-managed model removes that ambiguity:
 
 - store local profile config
 - store the eBay OAuth session locally
-- build the consent URL
-- exchange and refresh tokens directly with eBay
+- call the backend relay to start OAuth
+- receive the localhost handoff from the backend relay
+- store and refresh the local seller session through the backend relay
 - perform listing reads and writes
 - normalize Trading and Inventory models behind one CLI surface
 - expose agent-facing guide surfaces
 
-### Optional backend responsibilities
+### Backend responsibilities
 
-The backend is not required for the default CLI path. It exists as a reference implementation for:
+The backend is required for the production OAuth path. It exists as a reference implementation for:
 
 - `/privacy`
 - `/auth/success`
 - `/auth/declined`
 - marketplace account deletion webhook support
-- optional server-side OAuth callback or token services for private deployments
+- server-side OAuth callback and token exchange
+- refresh-token pass-through for the local CLI session
 
 ## Auth model
 
@@ -48,65 +51,61 @@ Each profile contains:
 
 ```yaml
 profile: default
-backendBaseUrl: https://your-optional-backend.example.com
-selfManagedApp:
+backendBaseUrl: https://your-backend.example.com
+ebaySession:
   environment: production
-  clientId: YOUR_CLIENT_ID
-  clientSecret: YOUR_CLIENT_SECRET
-  runame: YOUR_RUNAME
-  privacyPolicyUrl: https://your-site.example.com/privacy
-  acceptedUrl: https://your-site.example.com/auth/success
-  declinedUrl: https://your-site.example.com/auth/declined
+  marketplaceId: EBAY_US
+  accessToken: LOCAL_SESSION_ACCESS_TOKEN
+  refreshToken: LOCAL_SESSION_REFRESH_TOKEN
 ```
 
 Notes:
 
-- `backendBaseUrl` is optional for the public CLI flow
-- if the optional URLs are not supplied, the CLI derives them from `backendBaseUrl`
-- if no companion site exists, the user should pass explicit public URLs
+- `backendBaseUrl` is required for the recommended production flow
+- eBay app credentials live in backend configuration, not in the normal CLI profile
+- `selfManagedApp` remains only as an advanced direct/private testing fallback
 
 ## End-to-end auth flow
 
-1. User configures their eBay app credentials:
+1. User configures the backend relay URL:
 
 ```bash
-ebay config auth \
-  --client-id YOUR_CLIENT_ID \
-  --client-secret YOUR_CLIENT_SECRET \
-  --runame YOUR_RUNAME \
-  --environment production
+ebay config set --backend-url https://your-backend.example.com --json
 ```
 
 2. User starts login:
 
 ```bash
-ebay auth login --environment production
+ebay auth login --environment production --json
 ```
 
-3. CLI opens the eBay consent page using the user's own `Client ID` and `RuName`
+3. CLI calls backend `/api/local/ebay/authorize/start`
+4. Backend opens eBay consent using backend-configured `Client ID` and `RuName`
 4. User signs into eBay and approves access
-5. eBay redirects to the configured accepted URL
-6. CLI receives the code via localhost callback or manual paste flow
-7. CLI exchanges the code directly with eBay
-8. CLI stores the local session
-9. CLI refreshes the session directly with eBay as needed
+5. eBay redirects to backend `/oauth/ebay/callback`
+6. Backend exchanges the authorization code using backend-configured `Client Secret`
+7. Backend redirects to the CLI localhost listener with a one-time exchange code
+8. CLI calls backend `/api/local/ebay/authorize/exchange`
+9. CLI stores the returned local session
+10. CLI refreshes through backend `/api/local/ebay/refresh` as needed
 
-## Backend as reference implementation
+## Backend as relay implementation
 
-The repo still includes the ASP.NET backend because it is useful for:
+The repo includes the ASP.NET backend because production OAuth needs:
 
-- users who want a ready-made privacy page and auth landing pages
-- private deployments that prefer server-side token exchange
-- teams that want a starting point for operational hosting on Azure
-- demonstrating the eBay-required server-side surfaces in a concrete implementation
+- a public HTTPS callback URL
+- a privacy policy URL
+- auth accepted/declined landing pages
+- server-side token exchange and refresh
+- marketplace account deletion webhook support
 
 This backend should be described as:
 
-- optional
-- self-hosted or private
-- reference/example infrastructure
+- required for recommended production OAuth
+- deployment-owned
+- reusable reference infrastructure
 
-It should not be described as the default public dependency for the CLI.
+It should not be described as a shared public app that lets arbitrary third parties bypass their own deployment relationship.
 
 ## Packaging guidance
 
@@ -118,21 +117,21 @@ Preferred repo structure:
 
 Preferred public messaging:
 
-- public CLI path: self-managed only
-- backend: optional reference implementation
+- public CLI path: backend-relayed OAuth with local session storage
+- backend: reference implementation for deployment-owned relay
 - no shared public app mode
 
 ## Operational implications
 
-Because the CLI is self-managed:
+Because the CLI uses a deployment-owned backend relay:
 
-- no shared public app secret is required
-- no shared public auth broker is required
-- no shared app-level quota is imposed by your hosted service
-- support burden is clearer because each user owns their own eBay app configuration
+- no eBay app secret is embedded in the npm package
+- eBay OAuth has the required public HTTPS callback
+- local CLI sessions remain local after handoff
+- deployment operators own app credentials, quotas, privacy policy, uptime, and compliance posture
 
 ## Summary
 
 The correct public posture for this repo is:
 
-> Ship `ebaycli` as a self-managed, agent-first local CLI. Include the `.NET` backend as an optional reference implementation for eBay-required server-side surfaces and private/self-hosted deployments.
+> Ship `ebaycli` as an agent-first local CLI that uses a deployment-owned backend relay for production eBay OAuth, then stores and operates on the seller session locally.

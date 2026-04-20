@@ -4,7 +4,7 @@ import { getGuide } from "../src/guide.js";
 import { buildCliLlmsText } from "../src/llms.js";
 
 describe("guide", () => {
-  it("describes the self-managed auth model in the overview", () => {
+  it("describes the backend-relay auth model in the overview", () => {
     const guide = getGuide("overview") as {
       model: string;
       authModel: {
@@ -13,10 +13,10 @@ describe("guide", () => {
       };
     };
 
-    expect(guide.model).toBe("self-managed-local-cli");
-    expect(guide.authModel.mode).toBe("self-managed");
-    expect(guide.authModel.setup[0]).toContain("ebay config auth --client-id");
-    expect(guide.authModel.setup[1]).toContain("ebay auth login --environment production");
+    expect(guide.model).toBe("backend-relay-local-cli");
+    expect(guide.authModel.mode).toBe("backend-relay");
+    expect(guide.authModel.setup[0]).toContain("ebay config set --backend-url");
+    expect(guide.authModel.setup[1]).toContain("ebay auth login --environment production --json");
   });
 
   it("makes the first connect workflow explicit for agents", () => {
@@ -27,8 +27,8 @@ describe("guide", () => {
     };
 
     expect(guide.connect.steps).toEqual([
-      "Run `ebay config auth --client-id ... --client-secret ... --runame ... --environment production` first.",
-      "Run `ebay auth login --environment production` and finish the eBay consent flow in the browser.",
+      "Run `ebay config set --backend-url https://your-backend.example.com --json` first.",
+      "Run `ebay auth login --environment production --json` and finish the eBay consent flow in the browser.",
       "Run `ebay status --json` to verify the local session and seller readiness in one call."
     ]);
   });
@@ -53,6 +53,6 @@ describe("guide", () => {
     const llms = buildCliLlmsText();
     expect(llms).toContain("ebay guide --json");
     expect(llms).toContain("ebay llms");
-    expect(llms).toContain("self-managed local eBay CLI");
+    expect(llms).toContain("backend-relay local eBay CLI");
   });
 });

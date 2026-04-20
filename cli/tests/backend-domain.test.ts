@@ -19,7 +19,6 @@ import {
   loadBackendProfiles,
   requireConfiguredBackendProfile,
   requireLocalEbaySession,
-  requireSelfManagedApp,
   upsertBackendProfile
 } from "../src/backend-config.js";
 import { AppError } from "../src/errors.js";
@@ -136,7 +135,7 @@ describe("bootstrap guidance", () => {
       expect(error.details).toEqual(
         expect.objectContaining({
           profile: "default",
-          issue: "missing_app_credentials",
+          issue: "missing_backend_url",
           mode: "unconfigured",
           configured: {
             backendBaseUrl: false,
@@ -144,8 +143,8 @@ describe("bootstrap guidance", () => {
             ebaySession: false
           },
           nextCommands: [
-            "ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment production",
-            "ebay auth login --environment production",
+            "ebay config set --backend-url https://your-backend.example.com --json",
+            "ebay auth login --environment production --json",
             "ebay status --json"
           ],
           docs: expect.arrayContaining(["README.md", "cli/README.md"])
@@ -156,39 +155,17 @@ describe("bootstrap guidance", () => {
     }
   });
 
-  it("does not treat the companion backend relay as a replacement for user-owned app credentials", () => {
+  it("treats a backend relay URL as sufficient production auth configuration", () => {
     const dir = useIsolatedConfigHome();
-    const profile = upsertBackendProfile({
-      name: "relay-only",
+    upsertBackendProfile({
+      name: "default",
       backendBaseUrl: "https://backend.example.test"
     });
 
     try {
-      let thrown: unknown;
-      try {
-        requireSelfManagedApp(profile);
-      } catch (error) {
-        thrown = error;
-      }
-
-      expect(thrown).toBeInstanceOf(AppError);
-      const error = thrown as AppError;
-      expect(error.code).toBe("CONFIG_ERROR");
-      expect(error.details).toEqual(
-        expect.objectContaining({
-          profile: "relay-only",
-          issue: "missing_app_credentials",
-          mode: "companion-backend-relay",
-          configured: {
-            backendBaseUrl: true,
-            selfManagedApp: false,
-            ebaySession: false
-          },
-          notes: expect.arrayContaining([
-            "The optional backend is only a companion relay/site for OAuth callback, privacy, and health surfaces; it is not a shared public auth mode."
-          ])
-        })
-      );
+      const profile = requireConfiguredBackendProfile();
+      expect(profile.backendBaseUrl).toBe("https://backend.example.test");
+      expect(profile.selfManagedApp).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -221,14 +198,14 @@ describe("bootstrap guidance", () => {
         expect.objectContaining({
           profile: "configured",
           issue: "missing_ebay_session",
-          mode: "self-managed",
+          mode: "direct",
           configured: {
             backendBaseUrl: false,
             selfManagedApp: true,
             ebaySession: false
           },
           nextCommands: [
-            "ebay auth login --environment sandbox",
+            "ebay auth login --environment sandbox --json",
             "ebay status --json"
           ]
         })
@@ -269,20 +246,11 @@ describe("local eBay session flows", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("uses the backend relay for authorization start when a companion backend is configured", async () => {
+  it("uses the backend relay for authorization start with only a backend URL configured", async () => {
     const dir = useIsolatedConfigHome();
     const profile = upsertBackendProfile({
-      name: "self-managed-relay",
-      backendBaseUrl: "https://backend.example.test",
-      selfManagedApp: {
-        environment: "sandbox",
-        clientId: "sandbox-client-id",
-        clientSecret: "sandbox-client-secret",
-        runame: "sandbox-runame",
-        privacyPolicyUrl: "https://backend.example.test/privacy",
-        acceptedUrl: "https://backend.example.test/auth/success",
-        declinedUrl: "https://backend.example.test/auth/declined"
-      }
+      name: "backend-relay",
+      backendBaseUrl: "https://backend.example.test"
     });
 
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -360,8 +328,8 @@ describe("local eBay session flows", () => {
         requestedEnvironment: "sandbox",
         configuredEnvironment: "production",
         nextCommands: [
-          "ebay auth login --environment production",
-          "ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment sandbox",
+          "ebay auth login --environment production --json",
+          "ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment sandbox --json",
           "ebay config status --json"
         ]
       })
@@ -522,21 +490,12 @@ describe("local eBay session flows", () => {
     }
   });
 
-  it("uses the backend relay for refresh when the companion backend owns token pass-through", async () => {
+  it("uses the backend relay for refresh without local app credentials", async () => {
     const dir = useIsolatedConfigHome();
 
     const profile = upsertBackendProfile({
       name: "relay-refresh",
       backendBaseUrl: "https://backend.example.test",
-      selfManagedApp: {
-        environment: "sandbox",
-        clientId: "sandbox-client-id",
-        clientSecret: "sandbox-client-secret",
-        runame: "sandbox-runame",
-        privacyPolicyUrl: "https://backend.example.test/privacy",
-        acceptedUrl: "https://backend.example.test/auth/success",
-        declinedUrl: "https://backend.example.test/auth/declined"
-      },
       ebaySession: {
         environment: "sandbox",
         marketplaceId: "EBAY_US",

@@ -530,16 +530,17 @@ static string BuildLlmsText()
     return """
 # ebaycli
 
-ebaycli is a self-managed local eBay CLI.
+ebaycli is a backend-relay local eBay CLI.
 
-- every user provides their own eBay app credentials
+- production OAuth uses a deployment-owned backend relay because eBay requires a public HTTPS redirect URL
+- backend configuration owns the eBay app credentials for this deployment
 - the CLI stores the eBay OAuth session locally
 - the CLI owns listing/setup workflow logic
-- this backend is an optional reference implementation for privacy/auth landing pages and other server-side eBay surfaces
+- this backend is the reference relay implementation for privacy/auth landing pages and other server-side eBay surfaces
 
 ## Project status
 
-- Self-managed auth is the only public CLI mode
+- Backend-relayed OAuth is the recommended production CLI mode
 - No backend user-account or store-owner model in the active product path
 - Supports both eBay listing models:
   - Trading/classic listings for active and sold reads, legacy listing detail, and legacy update/end flows
@@ -560,10 +561,10 @@ ebaycli is a self-managed local eBay CLI.
 
 - cd cli && node dist/index.js guide --json
   - Return machine-readable project guidance for agents
-- cd cli && node dist/index.js config auth --client-id ... --client-secret ... --runame ...
-  - Configure the local CLI profile with the user's own eBay app credentials
-- cd cli && node dist/index.js auth login --environment production
-  - Start local eBay OAuth and store the resulting session in the selected CLI profile
+- cd cli && node dist/index.js config set --backend-url https://your-backend.example.com --json
+  - Configure the backend relay URL
+- cd cli && node dist/index.js auth login --environment production --json
+  - Start backend-relayed eBay OAuth and store the resulting session in the selected CLI profile
 - cd cli && node dist/index.js auth status --json
   - Show the connected eBay account
 - cd cli && node dist/index.js setup doctor --json

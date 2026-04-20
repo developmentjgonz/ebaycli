@@ -2,8 +2,8 @@
 
 This repository contains:
 
-- `/cli`: the self-managed eBay CLI package
-- `/backend`: the optional ASP.NET reference backend
+- `/cli`: the eBay CLI package
+- `/backend`: the ASP.NET reference backend relay
 
 Use these entrypoints:
 
@@ -13,4 +13,4 @@ Use these entrypoints:
 - Backend docs: `/backend/EbayStoreManager.Api/README.md`
 - Backend solution: `/backend/EbayStoreManager.sln`
 
-The public product story is self-managed CLI first. The backend is optional reference infrastructure.
+The public product story is CLI first with backend-relayed OAuth for production. The backend owns eBay app credentials for a deployment; the CLI stores the local seller session and performs listing workflows.

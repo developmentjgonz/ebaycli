@@ -85,7 +85,7 @@ export function createCli(): Command {
   const program = new Command();
   program
     .name("ebay")
-    .description("Self-managed local eBay CLI for connecting your own eBay app and managing listings")
+    .description("Backend-relay local eBay CLI for connecting a seller account and managing listings")
     .version(APP_VERSION)
     .option("-p, --profile <name>", "local CLI profile name", "default")
     .option("--json", "emit machine-readable JSON", false);
@@ -129,10 +129,10 @@ export function createCli(): Command {
       );
     });
 
-  const config = program.command("config").description("Configure this CLI profile and optional companion backend/site URLs");
+  const config = program.command("config").description("Configure this CLI profile and backend relay");
   config
     .command("set")
-    .description("Set the optional companion backend/site URL used for default privacy and auth landing pages")
+    .description("Set the production backend relay URL used for eBay OAuth callback and token exchange")
     .option("--backend-url <url>")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
@@ -145,7 +145,7 @@ export function createCli(): Command {
 
   config
     .command("auth")
-    .description("Configure self-managed eBay app credentials for this profile")
+    .description("Configure advanced direct eBay app credentials for this profile")
     .requiredOption("--client-id <clientId>")
     .requiredOption("--client-secret <clientSecret>")
     .requiredOption("--runame <runame>")
@@ -410,8 +410,8 @@ export function buildConfigStatusForOutput(profile: ReturnType<typeof resolveBac
     selfManagedApp: Boolean(profile.selfManagedApp),
     ebaySession: Boolean(profile.ebaySession)
   };
-  const guidance = !profile.selfManagedApp
-    ? buildBootstrapGuidance(profile, "missing_app_credentials")
+  const guidance = !profile.backendBaseUrl && !profile.selfManagedApp
+    ? buildBootstrapGuidance(profile, "missing_backend_url")
     : !profile.ebaySession
       ? buildBootstrapGuidance(profile, "missing_ebay_session")
       : undefined;
@@ -419,9 +419,10 @@ export function buildConfigStatusForOutput(profile: ReturnType<typeof resolveBac
   return {
     profile: redactProfileForOutput(profile),
     setup: {
+      authMode: profile.backendBaseUrl ? "backend-relay" : profile.selfManagedApp ? "direct" : "unconfigured",
       configured,
-      readyForLogin: configured.selfManagedApp,
-      readyForOperations: configured.selfManagedApp && configured.ebaySession,
+      readyForLogin: configured.backendBaseUrl || configured.selfManagedApp,
+      readyForOperations: (configured.backendBaseUrl || configured.selfManagedApp) && configured.ebaySession,
       ...(guidance ? { nextCommands: guidance.nextCommands, notes: guidance.notes, docs: guidance.docs } : {})
     }
   };

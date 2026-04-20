@@ -88,6 +88,18 @@ export async function beginLocalEbayAuthorization(
   profile: BackendProfile,
   request: { environment: string; callbackUrl: string; marketplaceId?: string }
 ): Promise<LocalEbayAuthStartResponse> {
+  if (profile.backendBaseUrl) {
+    return await postBackendJson<LocalEbayAuthStartResponse>(
+      profile,
+      "/api/local/ebay/authorize/start",
+      {
+        environment: request.environment,
+        callbackUrl: request.callbackUrl,
+        marketplaceId: request.marketplaceId ?? "EBAY_US"
+      }
+    );
+  }
+
   const app = requireSelfManagedApp(profile);
   if (request.environment !== app.environment) {
     throw new AppError(
@@ -99,22 +111,10 @@ export async function beginLocalEbayAuthorization(
         requestedEnvironment: request.environment,
         configuredEnvironment: app.environment,
         nextCommands: [
-          `ebay auth login --environment ${app.environment}`,
-          `ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment ${request.environment}`,
+          `ebay auth login --environment ${app.environment} --json`,
+          `ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment ${request.environment} --json`,
           "ebay config status --json"
         ]
-      }
-    );
-  }
-
-  if (shouldUseBackendAuthRelay(profile, app)) {
-    return await postBackendJson<LocalEbayAuthStartResponse>(
-      profile,
-      "/api/local/ebay/authorize/start",
-      {
-        environment: request.environment,
-        callbackUrl: request.callbackUrl,
-        marketplaceId: request.marketplaceId ?? "EBAY_US"
       }
     );
   }
@@ -133,8 +133,7 @@ export async function exchangeLocalEbayAuthorization(
   profile: BackendProfile,
   request: { state: string; code: string }
 ): Promise<LocalEbaySession> {
-  const app = requireSelfManagedApp(profile);
-  if (shouldUseBackendAuthRelay(profile, app)) {
+  if (profile.backendBaseUrl) {
     return await postBackendJson<LocalEbaySession>(
       profile,
       "/api/local/ebay/authorize/exchange",
@@ -142,12 +141,12 @@ export async function exchangeLocalEbayAuthorization(
     );
   }
 
+  const app = requireSelfManagedApp(profile);
   return await exchangeSelfManagedAuthorization(app, request.code);
 }
 
 export async function refreshLocalEbaySession(profile: BackendProfile, session: LocalEbaySession): Promise<LocalEbaySession> {
-  const app = requireSelfManagedApp(profile);
-  if (shouldUseBackendAuthRelay(profile, app)) {
+  if (profile.backendBaseUrl) {
     return await postBackendJson<LocalEbaySession>(
       profile,
       "/api/local/ebay/refresh",
@@ -164,6 +163,7 @@ export async function refreshLocalEbaySession(profile: BackendProfile, session: 
     );
   }
 
+  const app = requireSelfManagedApp(profile);
   return await refreshSelfManagedSession(app, session);
 }
 
@@ -277,12 +277,12 @@ export async function listLocalListings(
 
 export async function getLocalListing(profile: BackendProfile, reference: string): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await getListingDirect(createExecutionClient(session), session, reference, requireSelfManagedApp(profile));
+  return await getListingDirect(createExecutionClient(session), session, reference, profile.selfManagedApp);
 }
 
 export async function pullLocalListing(profile: BackendProfile, reference: string, outputPath: string): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  const spec = await pullListingDirect(createExecutionClient(session), session, reference, requireSelfManagedApp(profile));
+  const spec = await pullListingDirect(createExecutionClient(session), session, reference, profile.selfManagedApp);
   writeDataFile(outputPath, spec);
   return spec;
 }
@@ -304,22 +304,22 @@ export async function verifyLocalListingCreate(profile: BackendProfile, request:
 
 export async function updateLocalListingPlan(profile: BackendProfile, reference: string, request: ListingPatchRequest): Promise<MutationPlanResponse> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await planUpdateDirect(createExecutionClient(session), session, reference, request, requireSelfManagedApp(profile));
+  return await planUpdateDirect(createExecutionClient(session), session, reference, request, profile.selfManagedApp);
 }
 
 export async function updateLocalListing(profile: BackendProfile, reference: string, request: ListingPatchRequest): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await updateListingDirect(createExecutionClient(session), session, reference, request, requireSelfManagedApp(profile));
+  return await updateListingDirect(createExecutionClient(session), session, reference, request, profile.selfManagedApp);
 }
 
 export async function endLocalListingPlan(profile: BackendProfile, reference: string): Promise<MutationPlanResponse> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await planEndDirect(createExecutionClient(session), session, reference, requireSelfManagedApp(profile));
+  return await planEndDirect(createExecutionClient(session), session, reference, profile.selfManagedApp);
 }
 
 export async function endLocalListing(profile: BackendProfile, reference: string): Promise<unknown> {
   const session = await ensureFreshLocalEbaySession(profile);
-  return await endListingDirect(createExecutionClient(session), session, reference, requireSelfManagedApp(profile));
+  return await endListingDirect(createExecutionClient(session), session, reference, profile.selfManagedApp);
 }
 
 function createExecutionClient(session: LocalEbaySession): EbayApiClient {
@@ -386,10 +386,14 @@ async function startSelfManagedAuthorizationListener(profile: BackendProfile): P
   waitForResult: (timeoutMs: number) => Promise<{ code?: string; state?: string; error?: string }>;
   close: () => Promise<void>;
 }> {
+  if (profile.backendBaseUrl) {
+    return await startBrowserCallbackServer(DEFAULT_CALLBACK_PORT);
+  }
+
   const app = requireSelfManagedApp(profile);
   const acceptedUrl = app.acceptedUrl ?? "";
   const isLocalCallback = acceptedUrl.includes("127.0.0.1") || acceptedUrl.includes("localhost");
-  if (isLocalCallback || shouldUseBackendAuthRelay(profile, app)) {
+  if (isLocalCallback) {
     return await startBrowserCallbackServer(DEFAULT_CALLBACK_PORT);
   }
 
@@ -435,12 +439,6 @@ function toAuthEnvironment(app: SelfManagedApp, environment: string) {
     clientSecret: app.clientSecret,
     runame: app.runame
   };
-}
-
-function shouldUseBackendAuthRelay(profile: BackendProfile, app: SelfManagedApp): boolean {
-  const acceptedUrl = app.acceptedUrl ?? "";
-  const isLocalCallback = acceptedUrl.includes("127.0.0.1") || acceptedUrl.includes("localhost");
-  return Boolean(profile.backendBaseUrl) && !isLocalCallback;
 }
 
 async function postBackendJson<T>(profile: BackendProfile, path: string, payload: unknown): Promise<T> {

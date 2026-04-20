@@ -12,11 +12,11 @@ Make `ebaycli` behave cleanly from a brand-new local state while preserving an e
 
 - The CLI is the main product surface.
 - The CLI owns most eBay API interaction logic.
-- The backend is a thinner optional companion for:
-  - OAuth callback relay/token pass-through when needed
+- The backend is required for the recommended production OAuth path:
+  - OAuth callback relay/token pass-through
   - required hosted auth/legal surfaces
-  - optional companion endpoints
-- The CLI must not provide a shared public eBay auth mode. Every user-owned install supplies its own eBay developer app credentials.
+  - operational health and eBay notification endpoints
+- The CLI must not embed eBay app credentials. Each deployment-owned backend supplies its own eBay developer app configuration.
 
 ## Desired startup states
 
@@ -25,9 +25,10 @@ No config file or no usable profile exists.
 
 Expected behavior:
 - `ebay status` or `ebay auth status` should fail clearly and calmly.
-- The CLI should explain the two valid setup paths:
-  1. self-managed app flow with direct CLI OAuth
-  2. self-managed app flow with optional companion-backend callback relay
+- The CLI should explain the recommended setup path:
+  1. configure a backend relay URL
+  2. start backend-relayed OAuth
+  3. verify status
 - The error should tell the user exactly what to run next.
 
 ### 2. Existing connected profile
@@ -40,8 +41,22 @@ Expected behavior:
 
 ## Supported auth modes
 
-### Self-managed direct mode
-Use when the user provides their own eBay app credentials and the CLI can complete OAuth without a hosted relay.
+### Backend relay mode
+Use for production.
+
+Expected profile shape includes:
+- `backendBaseUrl`
+- `ebaySession` after login
+
+Expected behavior:
+- login bootstrap is initiated through the backend
+- eBay redirects to the backend HTTPS callback
+- backend exchanges the eBay code and redirects to CLI localhost with a one-time exchange code
+- refresh is delegated through the backend
+- normal listing/status/setup flows continue through the CLI
+
+### Direct mode
+Use only as an advanced/private testing fallback when the user has a workable direct OAuth setup.
 
 Expected profile shape includes:
 - `selfManagedApp.clientId`
@@ -52,27 +67,11 @@ Expected profile shape includes:
 
 Expected behavior:
 - login and refresh can be handled directly by the CLI
-- normal listing/status/setup flows continue through the CLI
-
-### Self-managed companion-relay mode
-Use when the user provides their own eBay app credentials and also configures the optional reference backend for hosted OAuth callback, privacy, and health surfaces.
-
-Expected profile shape includes:
-- `backendBaseUrl`
-- `selfManagedApp.clientId`
-- `selfManagedApp.clientSecret`
-- `selfManagedApp.runame`
-- optional accepted/declined/privacy URLs
-- `ebaySession` after login
-
-Expected behavior:
-- login bootstrap may be initiated through the companion backend
-- refresh may be delegated through the companion backend
 - listing/status/setup flows continue through the CLI
 
 Non-negotiable:
-- the companion backend does not replace user-owned eBay app credentials
-- the companion backend is not a shared public OAuth application for arbitrary CLI users
+- eBay app credentials are not embedded in the npm package
+- the backend is deployment-owned infrastructure, not a way for arbitrary users to bypass eBay developer setup and compliance
 
 ## Existing connection preservation rule
 
@@ -89,19 +88,19 @@ For the current project intent, that means the last working `freshlifeusa` conne
 From zero local state, the CLI should make the next step obvious.
 
 Desired guidance shape:
-- If no backend URL and no self-managed app config exist:
-  - explain both setup options
-- If direct self-managed mode is intended:
-  - tell the user to configure app credentials and start auth
-- If companion-relay mode is intended:
-  - tell the user to set the backend URL, configure app credentials, then start auth
+- If no backend URL and no direct app config exist:
+  - tell the user to set the backend URL and start auth
+- If backend relay mode is configured:
+  - tell the user to start auth
+- If direct mode is configured:
+  - allow direct auth but label it as advanced/private testing
 
 ## Non-goals for this spec
 
 This spec does not require or permit:
 - automatic profile migrations that silently destroy working sessions
 - silent rewriting of old profiles
-- shared public auth mode in the CLI
+- embedded app credentials in the CLI
 - broader architecture changes beyond the current CLI-first direction
 
 ## Practical principle
@@ -118,7 +117,7 @@ Avoid:
 ## Suggested future implementation approach
 
 When revisiting this later, prefer a small, explicit approach:
-1. detect whether the profile is direct self-managed or companion-relay self-managed
+1. detect whether the profile is backend-relay, direct, or unconfigured
 2. preserve any existing connected seller session
 3. give targeted guidance when config is incomplete
 4. keep logout/disconnect/reset explicit and user-driven
