@@ -71,7 +71,8 @@ function buildOverviewGuide() {
     authModel: {
       mode: "self-managed",
       setup: [
-        "Run `ebay config auth --client-id ... --client-secret ... --runame ...`.",
+        "Run `ebay config auth --client-id ... --client-secret ... --runame ... --environment production`.",
+        "Run `ebay auth login --environment production` and complete the eBay consent flow.",
         "Optional URLs default to the configured companion backend/site: `/privacy`, `/auth/success`, `/auth/declined`."
       ]
     },
@@ -99,7 +100,7 @@ function buildCapabilitiesGuide() {
         purpose: "Set the optional companion backend/site URL used to derive default privacy and auth landing page URLs."
       },
       {
-        command: "ebay config auth --client-id ... --client-secret ... --runame ...",
+        command: "ebay config auth --client-id ... --client-secret ... --runame ... --environment production",
         purpose: "Store the user-provided eBay app credentials in the local CLI profile."
       }
     ],
@@ -184,8 +185,8 @@ function buildWorkflowGuide() {
   return {
     connect: {
       steps: [
-        "Run `ebay config auth --client-id ... --client-secret ... --runame ...` first.",
-        "Finish the eBay consent flow in the browser.",
+        "Run `ebay config auth --client-id ... --client-secret ... --runame ... --environment production` first.",
+        "Run `ebay auth login --environment production` and finish the eBay consent flow in the browser.",
         "Run `ebay status --json` to verify the local session and seller readiness in one call."
       ]
     },

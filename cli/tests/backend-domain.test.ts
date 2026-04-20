@@ -340,13 +340,32 @@ describe("local eBay session flows", () => {
       }
     });
 
-    await expect(
-      beginLocalEbayAuthorization(profile, {
+    let thrown: unknown;
+    try {
+      await beginLocalEbayAuthorization(profile, {
         environment: "sandbox",
         callbackUrl: "https://example.test/auth/success",
         marketplaceId: "EBAY_US"
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AppError);
+    const error = thrown as AppError;
+    expect(error.message).toMatch(/configured for production auth/i);
+    expect(error.details).toEqual(
+      expect.objectContaining({
+        issue: "environment_mismatch",
+        requestedEnvironment: "sandbox",
+        configuredEnvironment: "production",
+        nextCommands: [
+          "ebay auth login --environment production",
+          "ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment sandbox",
+          "ebay config status --json"
+        ]
       })
-    ).rejects.toThrow(/configured for production auth/i);
+    );
 
     rmSync(dir, { recursive: true, force: true });
   });

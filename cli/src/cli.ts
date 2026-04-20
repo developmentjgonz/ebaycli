@@ -21,11 +21,13 @@ import {
   verifyLocalListingCreate
 } from "./backend-domain.js";
 import {
+  buildBootstrapGuidance,
   clearLocalEbaySession,
   requireConfiguredBackendProfile,
   resolveBackendProfile,
   upsertBackendProfile
 } from "./backend-config.js";
+import { APP_VERSION } from "./constants.js";
 import { AppError } from "./errors.js";
 import { getGuide } from "./guide.js";
 import { buildCliLlmsText } from "./llms.js";
@@ -84,6 +86,7 @@ export function createCli(): Command {
   program
     .name("ebay")
     .description("Self-managed local eBay CLI for connecting your own eBay app and managing listings")
+    .version(APP_VERSION)
     .option("-p, --profile <name>", "local CLI profile name", "default")
     .option("--json", "emit machine-readable JSON", false);
 
@@ -174,7 +177,7 @@ export function createCli(): Command {
     .description("Show profile configuration for this CLI profile")
     .action(async (_, command: Command) => {
       const global = getGlobalOptions(command);
-      renderResult(redactProfileForOutput(resolveBackendProfile(global.profile)), Boolean(global.json));
+      renderResult(buildConfigStatusForOutput(resolveBackendProfile(global.profile)), Boolean(global.json));
     });
 
   const auth = program.command("auth").description("Connect eBay locally and inspect the current local session");
@@ -399,6 +402,29 @@ export function createCli(): Command {
     });
 
   return program;
+}
+
+export function buildConfigStatusForOutput(profile: ReturnType<typeof resolveBackendProfile>) {
+  const configured = {
+    backendBaseUrl: Boolean(profile.backendBaseUrl),
+    selfManagedApp: Boolean(profile.selfManagedApp),
+    ebaySession: Boolean(profile.ebaySession)
+  };
+  const guidance = !profile.selfManagedApp
+    ? buildBootstrapGuidance(profile, "missing_app_credentials")
+    : !profile.ebaySession
+      ? buildBootstrapGuidance(profile, "missing_ebay_session")
+      : undefined;
+
+  return {
+    profile: redactProfileForOutput(profile),
+    setup: {
+      configured,
+      readyForLogin: configured.selfManagedApp,
+      readyForOperations: configured.selfManagedApp && configured.ebaySession,
+      ...(guidance ? { nextCommands: guidance.nextCommands, notes: guidance.notes, docs: guidance.docs } : {})
+    }
+  };
 }
 
 function normalizeWritePathOption(value: string): WritePath {

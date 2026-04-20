@@ -16,6 +16,21 @@ describe("guide", () => {
     expect(guide.model).toBe("self-managed-local-cli");
     expect(guide.authModel.mode).toBe("self-managed");
     expect(guide.authModel.setup[0]).toContain("ebay config auth --client-id");
+    expect(guide.authModel.setup[1]).toContain("ebay auth login --environment production");
+  });
+
+  it("makes the first connect workflow explicit for agents", () => {
+    const guide = getGuide("workflows") as {
+      connect: {
+        steps: string[];
+      };
+    };
+
+    expect(guide.connect.steps).toEqual([
+      "Run `ebay config auth --client-id ... --client-secret ... --runame ... --environment production` first.",
+      "Run `ebay auth login --environment production` and finish the eBay consent flow in the browser.",
+      "Run `ebay status --json` to verify the local session and seller readiness in one call."
+    ]);
   });
 
   it("returns machine-readable listing spec guidance", () => {

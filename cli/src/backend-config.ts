@@ -10,7 +10,7 @@ interface ProfilesFile {
   profiles: BackendProfile[];
 }
 
-type BootstrapIssue = "missing_app_credentials" | "missing_ebay_session";
+export type BootstrapIssue = "missing_app_credentials" | "missing_ebay_session";
 
 export interface BootstrapGuidance {
   profile: string;

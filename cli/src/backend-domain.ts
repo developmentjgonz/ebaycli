@@ -9,7 +9,13 @@ import { promisify } from "node:util";
 
 import YAML from "yaml";
 
-import { getBackendProfile, requireLocalEbaySession, requireSelfManagedApp, upsertBackendProfile } from "./backend-config.js";
+import {
+  buildBootstrapGuidance,
+  getBackendProfile,
+  requireLocalEbaySession,
+  requireSelfManagedApp,
+  upsertBackendProfile
+} from "./backend-config.js";
 import { DEFAULT_CALLBACK_PORT } from "./constants.js";
 import { DefaultScopes, EbayApiClient, buildAuthorizeUrl, resolveEbayEnvironment } from "./ebay-api.js";
 import {
@@ -86,7 +92,18 @@ export async function beginLocalEbayAuthorization(
   if (request.environment !== app.environment) {
     throw new AppError(
       "CONFIG_ERROR",
-      `This profile is configured for ${app.environment} auth. Re-run \`ebay auth login --environment ${app.environment}\` or update \`ebay config auth --environment ...\`.`
+      `This profile is configured for ${app.environment} auth. Re-run \`ebay auth login --environment ${app.environment}\` or update \`ebay config auth --environment ...\`.`,
+      {
+        ...buildBootstrapGuidance(profile, "missing_ebay_session"),
+        issue: "environment_mismatch",
+        requestedEnvironment: request.environment,
+        configuredEnvironment: app.environment,
+        nextCommands: [
+          `ebay auth login --environment ${app.environment}`,
+          `ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment ${request.environment}`,
+          "ebay config status --json"
+        ]
+      }
     );
   }
 

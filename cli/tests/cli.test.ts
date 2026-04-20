@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createCli, redactProfileForOutput, runCli } from "../src/cli.js";
+import { buildConfigStatusForOutput, createCli, redactProfileForOutput, runCli } from "../src/cli.js";
 
 const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
 const originalExitCode = process.exitCode;
@@ -24,6 +24,7 @@ describe("CLI shape", () => {
     const cli = createCli();
     const commandNames = cli.commands.map((command) => command.name());
     expect(commandNames).toEqual(["guide", "llms", "status", "config", "auth", "setup", "listings"]);
+    expect(cli.options.some((option) => option.long === "--version")).toBe(true);
   });
 
   it("exposes the dual-mode auth config surface", () => {
@@ -55,6 +56,36 @@ describe("CLI shape", () => {
     expect(redacted.selfManagedApp?.clientSecret).toBe("***redacted***");
     expect(redacted.ebaySession?.accessToken).toBe("***redacted***");
     expect(redacted.ebaySession?.refreshToken).toBe("***redacted***");
+  });
+
+  it("shows first-run readiness and setup commands in config status output", () => {
+    const output = buildConfigStatusForOutput({
+      name: "default",
+      outputFormat: "text"
+    });
+
+    expect(output).toEqual(
+      expect.objectContaining({
+        profile: {
+          name: "default",
+          outputFormat: "text"
+        },
+        setup: expect.objectContaining({
+          configured: {
+            backendBaseUrl: false,
+            selfManagedApp: false,
+            ebaySession: false
+          },
+          readyForLogin: false,
+          readyForOperations: false,
+          nextCommands: [
+            "ebay config auth --client-id <ebay-client-id> --client-secret <ebay-client-secret> --runame <ebay-runame> --environment production",
+            "ebay auth login --environment production",
+            "ebay status --json"
+          ]
+        })
+      })
+    );
   });
 
   it("emits a single machine-readable error envelope in JSON mode", async () => {
