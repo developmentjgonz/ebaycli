@@ -13,6 +13,8 @@ export interface EbayEnvironmentDescriptor {
 
 const JsonHeaders = { Accept: "application/json" };
 const TradingCompatibilityLevel = "1231";
+const RetryableTradingCalls = new Set(["GetMyeBaySelling", "GetItem", "VerifyAddFixedPriceItem"]);
+const MaxRetryDelayMs = 30_000;
 const tradingParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -451,8 +453,10 @@ export class EbayApiClient {
   private async sendWithRetry(url: string, init: RequestInit): Promise<Response> {
     const maxAttempts = 3;
     const baseDelayMs = 250;
+    const retrySafe = isRetrySafeRequest(init);
     let lastError: unknown;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      let delayMs = baseDelayMs * attempt;
       try {
         const response = await fetch(url, init);
         if (response.ok) {
@@ -460,31 +464,41 @@ export class EbayApiClient {
         }
 
         const payload = await response.text();
-        if (attempt >= maxAttempts || !shouldRetryStatus(response.status)) {
+        const requestedDelay = retryDelay(response.headers.get("Retry-After"), delayMs);
+        if (attempt >= maxAttempts || !retrySafe || !shouldRetryStatus(response.status) || requestedDelay > MaxRetryDelayMs) {
           if (isRevokedAuthResponse(response.status, payload)) {
             throw new AppError(
               "AUTH_REVOKED",
-              "The stored eBay authorization is no longer valid. Run `ebay auth login --environment production --json` to reconnect.",
+              "The stored eBay authorization is no longer valid.",
               {
                 status: response.status,
-                response: payload,
-                nextCommands: [
-                  "ebay auth login --environment production --json",
-                  "ebay status --json"
-                ]
+                response: payload
               }
             );
           }
-          throw new AppError("EBAY_API_ERROR", `eBay API request failed (${response.status}): ${payload}`, payload);
+          const guidance = !retrySafe && shouldRetryStatus(response.status)
+            ? " The write was not retried. Inspect the seller account or listing state before repeating it."
+            : requestedDelay > MaxRetryDelayMs && shouldRetryStatus(response.status)
+              ? " eBay requested a longer wait; retry after the Retry-After interval."
+              : "";
+          throw new AppError("EBAY_API_ERROR", `eBay API request failed (${response.status}): ${payload}${guidance}`, payload);
         }
+        delayMs = requestedDelay;
       } catch (error) {
         lastError = error;
-        if (attempt >= maxAttempts || error instanceof AppError) {
+        if (error instanceof AppError || init.signal?.aborted) {
           throw error;
         }
+        if (!retrySafe) {
+          throw new AppError(
+            "EBAY_API_ERROR",
+            "The eBay write could not be confirmed and was not retried because it may have succeeded. Inspect the seller account or listing state before repeating it."
+          );
+        }
+        if (attempt >= maxAttempts) throw error;
       }
 
-      await sleep(baseDelayMs * attempt);
+      await sleep(delayMs);
     }
 
     throw lastError instanceof Error
@@ -522,6 +536,22 @@ function sleep(ms: number): Promise<void> {
 
 function shouldRetryStatus(status: number): boolean {
   return status === 429 || status >= 500;
+}
+
+function isRetrySafeRequest(init: RequestInit): boolean {
+  const method = (init.method ?? "GET").toUpperCase();
+  if (method === "GET" || method === "HEAD") return true;
+  // Trading uses POST for reads too. Only known read/verification operations can be repeated safely.
+  const callName = new Headers(init.headers).get("X-EBAY-API-CALL-NAME");
+  return method === "POST" && callName !== null && RetryableTradingCalls.has(callName);
+}
+
+function retryDelay(value: string | null, fallbackMs: number): number {
+  if (value === null) return fallbackMs;
+  const seconds = Number(value);
+  if (value.trim() && Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : fallbackMs;
 }
 
 function isRevokedAuthResponse(status: number, payload: string): boolean {

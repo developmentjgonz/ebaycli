@@ -1,96 +1,62 @@
 # ebaycli
 
-`ebaycli` is a backend-relay local eBay CLI.
+Local eBay seller CLI for humans and agents. Requires Node.js 22 or newer.
 
-- production OAuth uses a deployment-owned backend relay because eBay requires a public HTTPS redirect URL
-- the backend exchanges and refreshes eBay tokens for the configured deployment
-- the CLI stores the eBay OAuth session locally
-- the `.NET` backend in this repo is the reference relay implementation for privacy/auth landing pages and other server-side eBay surfaces
-- direct local eBay app credentials are not supported by the CLI
+## Runtime discovery
 
-## Project status
+Prefer the installed package's version-matched runtime guide before choosing workflows or drafting payloads:
 
-- Local eBay session stored in the CLI profile
-- Backend-relayed OAuth is the recommended production CLI mode
-- No backend user-account or store-owner model in the active product path
-- Supports both eBay listing models:
-  - Trading/classic listings for active and sold reads, legacy listing detail, and legacy update/end flows
-  - Inventory API listings for create flows and Inventory-backed update/end flows
-- Designed for human CLI use and LLM/agent use
+- `ebay guide --json`
+- `ebay guide capabilities --json`
+- `ebay guide workflows --json`
+- `ebay guide listing-spec --json`
+- `ebay guide agent-notes --json`
+- `ebay llms`
+- `ebay --help`
 
-## Start here
+From a source checkout's `cli/` directory, use `node dist/index.js` in place of `ebay` after building.
 
-- Main package docs: `/cli/README.md`
-- Monorepo root docs: `/README.md`
-- Backend docs: `../backend/EbayStoreManager.Api/README.md`
-- Testing guidance: `../TEST_STRATEGY.md`
-- Sandbox test notes: `../TESTING.md`
+## Connect and inspect
 
-## Commands
+- `ebay config set --backend-url https://your-relay.example.com --json`
+- `ebay auth login --environment production --json`
+- `ebay status --json`
+- `ebay listings list --limit 5 --json`
 
-- `node dist/index.js guide --json`
-  - Return machine-readable project guidance for agents
-- `node dist/index.js config set --backend-url https://your-backend.example.com --json`
-  - Configure the backend relay URL
-- `node dist/index.js auth login --environment production --json`
-  - Start backend-relayed eBay OAuth and store the resulting session in the selected CLI profile
-- `node dist/index.js auth status --json`
-  - Show the connected eBay account
-- `node dist/index.js setup doctor --json`
-  - Show seller readiness, business policy availability, and location readiness
-- `node dist/index.js listings list --json`
-  - List active listings
-- `node dist/index.js listings list --status SOLD --days 30 --json`
-  - List recently sold listings
-- `node dist/index.js listings get <reference> --json`
-  - Fetch normalized listing detail
-- `node dist/index.js listings pull <reference> --out <file>`
-  - Export a normalized listing spec
-- `node dist/index.js listings create --file <draft.yaml>`
-  - Plan a listing create
-- `node dist/index.js listings update <reference> --file <patch.yaml>`
-  - Plan a listing update
-- `node dist/index.js listings end <reference>`
-  - Plan a listing end
+Login and refresh require a deployment-owned OAuth relay. The relay owns eBay app credentials and the public HTTPS callback; the CLI stores the local seller session and performs seller/listing workflows directly against eBay. The repository's TypeScript Cloudflare Worker is an optional reference implementation of that required relay capability. Direct CLI app credentials and shared public app authentication are not supported.
 
-## Agent guidance
+Use separate sandbox and production profiles. `--profile NAME` selects the relay URL, seller session, and defaults. Default profile: `default`. Profile storage: `~/.config/ebaycli/backend-profiles.json`, or `$XDG_CONFIG_HOME/ebaycli/backend-profiles.json`.
 
-Agents should prefer the built-in guide surface over repository inference:
+The examples above use the default profile for production. Add the same `--profile NAME` to every connection, setup, and listing command when selecting a different profile.
 
-- `node dist/index.js guide --json`
-- `node dist/index.js guide capabilities --json`
-- `node dist/index.js guide workflows --json`
-- `node dist/index.js guide listing-spec --json`
-- `node dist/index.js guide agent-notes --json`
-- `node dist/index.js llms`
+Profiles are local session selectors, not security boundaries. Concurrent agents should use separate `XDG_CONFIG_HOME` directories; otherwise serialize operations that save sessions or defaults. The profile file currently has no cross-process write lock.
 
-Use those commands before drafting listing files or deciding whether a listing operation will route through Trading or Inventory APIs.
+## Listing workflow
 
-## File formats
+- Prefer `--json` for automated reads, plans, and applies.
+- Use `ebay listings pull <reference> --out existing.yaml --json` to ground changes in current data.
+- References may use `sku:`, `offer:`, or `listing:` prefixes; numeric references are listing IDs.
+- Create, update, and end print plans unless `--apply` is supplied.
+- Create defaults to Inventory; `writePath: TRADING` or `--write-path TRADING` selects Trading.
+- Trading create `--verify` calls eBay without creating a listing; local images may be uploaded. Inventory remote verification is not implemented.
+- Update/end dispatch automatically by the resolved listing model.
+- Draft/patch files accept YAML or JSON. Image paths are relative to the file containing them.
+- Use `ebay setup doctor --json` to check seller readiness. Inventory create needs business policies and a merchant location.
+- Setup policy/location commands act immediately; they do not use `--apply`.
+- Agents should apply only changes authorized by the seller; OAuth grants permissions, and does not review a draft or approve each later mutation.
+- `auth logout` clears the local session; `auth disconnect` also supplies the manual My eBay grant-revocation path.
 
-- Draft listing input: YAML or JSON
-- Recommended for humans and agents: YAML
-- Command output for automation: JSON via `--json`
+## Documentation
 
-## Key code paths
+- [CLI README](https://github.com/developmentjgonz/ebaycli/blob/main/cli/README.md)
+- [Support matrix](https://github.com/developmentjgonz/ebaycli/blob/main/cli/SUPPORT_MATRIX.md)
+- [Payload examples](https://github.com/developmentjgonz/ebaycli/tree/main/cli/examples)
+- [Testing](https://github.com/developmentjgonz/ebaycli/blob/main/TESTING.md)
+- [Contributing](https://github.com/developmentjgonz/ebaycli/blob/main/CONTRIBUTING.md)
+- [Profiles](https://github.com/developmentjgonz/ebaycli/blob/main/docs/profiles.md)
+- [Architecture](https://github.com/developmentjgonz/ebaycli/blob/main/docs/agent-first-architecture.md)
+- [Code map](https://github.com/developmentjgonz/ebaycli/blob/main/docs/code-map.md)
+- [Relay deployment](https://github.com/developmentjgonz/ebaycli/blob/main/docs/deployment.md)
+- [Cloudflare Worker reference](https://github.com/developmentjgonz/ebaycli/blob/main/backend/README.md)
 
-- CLI entrypoint: `/cli/src/cli.ts`
-- Agent guide surface: `/cli/src/guide.ts`
-- CLI runtime logic: `/cli/src/backend-domain.ts`
-- Local profile persistence: `/cli/src/backend-config.ts`
-- Backend relay routes: `/backend/EbayStoreManager.Api/Program.cs`
-- Local direct eBay client: `/cli/src/ebay-api.ts`
-- Local listing/setup engine: `/cli/src/ebay-engine.ts`
-
-## Testing
-
-Current automated coverage includes:
-
-- CLI shape and guide surface
-- listing draft normalization
-- local session refresh/default persistence
-- Trading parser/request-shape coverage
-- legacy vs Inventory dispatch coverage
-- local authorize-start route smoke
-
-See `../TEST_STRATEGY.md` for the current automated/manual split.
+The npm package includes `examples/listing.yaml`, `examples/listing-trading.yaml`, `examples/price-update.yaml`, `examples/policies.yaml`, `examples/location.yaml`, and `examples/README.md`. These are editable templates, not validated inputs for a particular seller or category. Prefer runtime discovery when repository documentation differs from the installed version.

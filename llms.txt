@@ -1,16 +1,24 @@
 # ebaycli monorepo
 
-This repository contains:
+A local TypeScript eBay seller CLI with an optional deployment-owned TypeScript Cloudflare Worker OAuth relay.
 
-- `/cli`: the eBay CLI package
-- `/backend`: the ASP.NET reference backend relay
+## Start here
 
-Use these entrypoints:
+- [CLI usage](cli/README.md)
+- [Examples](cli/examples/README.md)
+- [Supported operations](cli/SUPPORT_MATRIX.md)
+- [Architecture](docs/agent-first-architecture.md)
+- [Local profiles](docs/profiles.md)
+- [Worker setup](backend/README.md)
+- [Cloudflare deployment](docs/deployment.md)
+- [Code map](docs/code-map.md)
+- [Contribution guide](CONTRIBUTING.md)
+- [Testing](TESTING.md)
 
-- CLI docs: `/cli/README.md`
-- CLI package and source: `/cli/package.json`, `/cli/src`
-- Architecture: `/docs/agent-first-architecture.md`
-- Backend docs: `/backend/EbayStoreManager.Api/README.md`
-- Backend solution: `/backend/EbayStoreManager.sln`
+## Runtime discovery
 
-The public product story is CLI first with backend-relayed OAuth for production. The backend owns eBay app credentials for a deployment; the CLI stores the local seller session and performs listing workflows.
+Use `ebay guide --json` and `ebay llms` to inspect the installed CLI's workflows and listing inputs. From source, build with `npm --prefix cli run build` and invoke `node cli/dist/index.js guide --json`.
+
+The CLI owns local profiles, seller sessions, and direct listing/setup workflows. A compatible relay handles OAuth login and refresh using each deployment's eBay app credentials. The Worker reference deploys directly to Cloudflare Workers with D1 temporary auth-state storage. No shared public auth mode or embedded eBay app secret is provided.
+
+The current package is a local CLI, with separate agent configuration directories recommended for concurrent sellers or workers. Named profiles are selectors, not hosted tenant isolation. OAuth login is account consent; review listing plans and authorize account changes before applying them. Consult the support matrix and testing guide for fixture-based coverage and live-account limitations.

@@ -1,78 +1,87 @@
 # CLI Support Matrix
 
-This file defines the intended operational support level for the public self-managed CLI.
+This matrix describes the implemented public CLI surface. Runtime commands and `ebay guide --json` are version-matched to your installed package. See the [package README](README.md) for setup and workflows.
 
-## Auth and Session
+## Authentication and profiles
 
-| Capability | Status | Notes |
+| Capability | Support | Notes |
 | --- | --- | --- |
-| Configure self-managed eBay app credentials | Supported | `ebay config auth` |
-| Local OAuth login | Supported | Works with backend relay or manual/direct callback patterns |
-| Local session persistence | Supported | Stored in local profile config |
-| Access-token refresh | Supported | Automatic before operational commands |
+| Configure relay URL | Supported | `ebay config set --backend-url URL`; selected with `--profile NAME` |
+| Login through deployment-owned relay | Supported | Sandbox and production; relay owns app credentials and the public HTTPS callback |
+| Configure eBay app credentials in CLI | Unsupported | Configure credentials in your relay deployment |
+| Manual consent URL opening | Supported | `auth login --no-open` prints the URL to stderr and waits for the localhost callback on the same machine |
+| Direct OAuth or pasted callback codes | Unsupported | Login receives the validated local callback from the relay |
+| Local session persistence | Supported | Saved in the selected local profile |
+| Access-token refresh | Supported | Operational commands refresh expiring tokens through the relay |
 | Local logout | Supported | Clears only the local session |
-| Full grant revoke | Partial | CLI provides My eBay revoke guidance; no supported programmatic revoke flow |
+| Full grant revocation | Manual | `auth disconnect` supplies My eBay guidance; no programmatic revoke flow |
 
-## Operational Checks
+The relay capability is required for current login and refresh. The repository's TypeScript Cloudflare Worker is an optional reference implementation; another compatible deployment-owned relay can provide the same endpoints. See the [backend README](https://github.com/developmentjgonz/ebaycli/blob/main/backend/README.md) and [deployment.md](https://github.com/developmentjgonz/ebaycli/blob/main/docs/deployment.md).
 
-| Capability | Status | Notes |
+## Seller setup and checks
+
+| Capability | Support | Notes |
 | --- | --- | --- |
 | Combined operational snapshot | Supported | `ebay status --json` |
 | Auth/account status | Supported | `ebay auth status --json` |
 | Seller readiness doctor | Supported | `ebay setup doctor --json` |
-| Policy default sync | Supported | `ebay setup policies sync` |
-| Program opt-in | Supported with eBay constraints | eBay may reject unsupported accounts |
-| Merchant location upsert | Supported | `ebay setup location set` |
+| Policy creation/default sync | Supported with account constraints | `ebay setup policies sync`; [policy payload](examples/policies.yaml) |
+| Program opt-in | Supported with account constraints | eBay may reject unsupported accounts |
+| Merchant location creation/update/default | Supported | `ebay setup location set`; [location payload](examples/location.yaml) |
 
-## Listing Reads
+Setup writes act immediately and do not have `--apply` or plan modes.
 
-| Capability | Status | Notes |
+## Listing reads and writes
+
+| Capability | Support | Notes |
 | --- | --- | --- |
-| Active listings list | Supported | Trading-backed for classic listings |
-| Sold listings list | Supported | Trading-backed |
-| Listing detail (`get`) | Supported | Inventory first, then Trading, then Browse fallback for legacy ids |
-| Listing export (`pull`) | Supported | Produces normalized YAML/JSON-friendly spec |
+| Active listings | Supported | Trading-backed for classic listings |
+| Sold listings | Supported | Trading-backed; configurable lookback |
+| Detail and export | Supported | Normalized data; Inventory, Trading, and legacy Browse fallback |
+| Create plan | Supported | Defaults to Inventory; explicit `writePath` or `--write-path` selects Trading |
+| Create verification | Trading only | `--verify` validates remotely without creating a listing; can upload local images |
+| Create apply | Supported with account/category constraints | Inventory and Trading fixed-price paths implemented |
+| Update plan/apply | Supported | Resolved listing model selects Trading or Inventory |
+| End plan/apply | Supported | Trading end or Inventory withdrawal |
 
-## Listing Writes
+Create, update, and end print a plan unless `--apply` is supplied. Inventory `--verify` returns `verified: false` and a plan; it is not a remote verification success. eBay can still reject an apply after a successful plan or verification.
 
-| Capability | Status | Notes |
-| --- | --- | --- |
-| Create plan | Supported | Supports explicit `writePath` for Inventory or Trading |
-| Create verify | Supported for Trading | `ebay listings create --file draft.yaml --verify` validates classic Trading payloads remotely without creating the listing |
-| Create apply | Supported with eBay account prerequisites | Inventory and Trading create paths are implemented; success still depends on category/account constraints |
-| Update plan | Supported | Dispatches Trading vs Inventory by resolved listing type |
-| Update apply | Supported | Legacy price/quantity and legacy revise paths are implemented |
-| End plan | Supported | Dispatches Trading vs Inventory by resolved listing type |
-| End apply | Supported | Legacy end and Inventory withdraw are implemented |
+## Constraints
 
-## Known Constraints
+- Seller registration and category/account requirements control real publication success.
+- Inventory publishing requires policy IDs and a merchant location, supplied in the draft or saved as profile defaults.
+- Review condition, descriptors, category, and location when recreating a listing across Trading and Inventory models.
+- Legacy Trading detail can use Browse fallback; exported specs still need review before reuse.
+- Live API and account-specific behavior need verification beyond fixture-based automated tests.
 
-- eBay account readiness still controls real create/apply success.
-- Cross-model recreation may require model-specific field normalization. Example: Inventory condition enums may need review before Trading create.
-- Some legacy Trading detail calls are unreliable with OAuth. The CLI now uses Browse fallback for legacy listing detail instead of depending solely on Trading `GetItem`.
-- The CLI intentionally hides eBay API fragmentation behind a stable command surface, but the internal adapter layer still needs continued testing as more categories and seller configurations are exercised.
+## Validation and release checks
 
-## Release Gate
-
-Before treating a branch as release-ready, run:
+From the repository root, run each package in its own directory:
 
 ```bash
 cd cli
-npm test
-npm run build
-
+npm ci
+npm run check
+cd ..
 cd backend
-dotnet test EbayStoreManager.sln
+npm ci
+npm run check
+cd ..
+node scripts/check-docs.mjs
 ```
 
-Recommended live smoke checks on a real profile:
+Use a current Node.js 22 or newer release for development; the backend test suite requires Node 22.13 or newer. Backend hosting uses Cloudflare Workers and D1. For CLI package contents, run `npm pack --dry-run` from `cli/`. See [CONTRIBUTING.md](https://github.com/developmentjgonz/ebaycli/blob/main/CONTRIBUTING.md) and [TESTING.md](https://github.com/developmentjgonz/ebaycli/blob/main/TESTING.md) for validation details.
+
+Read-only and planning smoke checks for an already connected profile:
 
 ```bash
 ebay status --json
 ebay listings list --limit 5 --json
-ebay listings get <listingId> --json
-ebay listings pull <listingId> --out review.yaml --json
-ebay listings create --file draft.yaml --verify --json
-ebay listings update <listingId> --file patch.yaml --json
-ebay listings end <listingId> --json
+ebay listings get listing:YOUR_LISTING_ID --json
+ebay listings pull listing:YOUR_LISTING_ID --out review.yaml --json
+ebay listings create --file draft.yaml --json
+ebay listings update listing:YOUR_LISTING_ID --file patch.yaml --json
+ebay listings end listing:YOUR_LISTING_ID --json
 ```
+
+For a reviewed Trading draft, also run `ebay listings create --file draft.yaml --verify --json`. Live apply checks should use a seller-ready sandbox profile or an explicitly selected listing. A connected sandbox account alone does not demonstrate seller readiness.

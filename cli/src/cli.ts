@@ -1,7 +1,6 @@
 import { Command } from "commander";
 
 import {
-  authenticateWithEbayLocally,
   createLocalListing,
   createLocalListingPlan,
   createOrSetLocalLocation,
@@ -10,8 +9,6 @@ import {
   getLocalConnectionStatus,
   getLocalListing,
   listLocalListings,
-  parseListingPatchFile,
-  parseListingSpecFile,
   pullLocalListing,
   runLocalDoctor,
   optInLocalPolicyProgram,
@@ -19,14 +16,17 @@ import {
   updateLocalListing,
   updateLocalListingPlan,
   verifyLocalListingCreate
-} from "./backend-domain.js";
+} from "./runtime.js";
 import {
   buildBootstrapGuidance,
   clearLocalEbaySession,
-  requireConfiguredBackendProfile,
-  resolveBackendProfile,
-  upsertBackendProfile
-} from "./backend-config.js";
+  requireConfiguredProfile,
+  resolveProfile,
+  upsertProfile
+} from "./profile-config.js";
+import { parseListingPatchFile, parseListingSpecFile } from "./listing-files.js";
+import { authenticateWithEbayLocally, normalizeRelayUrl } from "./oauth.js";
+import type { LocalEbaySession } from "./types.js";
 import { APP_VERSION } from "./constants.js";
 import { AppError } from "./errors.js";
 import { getGuide } from "./guide.js";
@@ -58,16 +58,20 @@ function getGlobalOptions(command: Command): GlobalOptions {
   return ((command.opts() as Partial<GlobalOptions>) ?? { profile: "default", json: false }) as GlobalOptions;
 }
 
-export function redactProfileForOutput(profile: ReturnType<typeof resolveBackendProfile>) {
+export function redactSessionForOutput(session: LocalEbaySession) {
+  return {
+    ...session,
+    accessToken: "***redacted***",
+    refreshToken: "***redacted***"
+  };
+}
+
+export function redactProfileForOutput(profile: ReturnType<typeof resolveProfile>) {
   return {
     ...profile,
     ...(profile.ebaySession
       ? {
-          ebaySession: {
-            ...profile.ebaySession,
-            accessToken: "***redacted***",
-            refreshToken: "***redacted***"
-          }
+          ebaySession: redactSessionForOutput(profile.ebaySession)
         }
       : {})
   };
@@ -105,7 +109,7 @@ export function createCli(): Command {
     .description("Return a combined operational status snapshot for the selected profile")
     .action(async (_, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       const [connection, doctor] = await Promise.all([
         getLocalConnectionStatus(profile),
         runLocalDoctor(profile)
@@ -128,11 +132,11 @@ export function createCli(): Command {
     .option("--backend-url <url>")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = upsertBackendProfile({
+      const profile = upsertProfile({
         name: global.profile,
-        ...(options.backendUrl ? { backendBaseUrl: options.backendUrl } : {})
+        ...(options.backendUrl ? { backendBaseUrl: normalizeRelayUrl(options.backendUrl) } : {})
       });
-      renderResult(profile, Boolean(global.json));
+      renderResult(redactProfileForOutput(profile), Boolean(global.json));
     });
 
   config
@@ -140,7 +144,7 @@ export function createCli(): Command {
     .description("Show profile configuration for this CLI profile")
     .action(async (_, command: Command) => {
       const global = getGlobalOptions(command);
-      renderResult(buildConfigStatusForOutput(resolveBackendProfile(global.profile)), Boolean(global.json));
+      renderResult(buildConfigStatusForOutput(resolveProfile(global.profile)), Boolean(global.json));
     });
 
   const auth = program.command("auth").description("Connect eBay locally and inspect the current local session");
@@ -149,19 +153,22 @@ export function createCli(): Command {
     .description("Connect eBay locally and store the OAuth session in this CLI profile")
     .option("--environment <environment>", "production or sandbox", "production")
     .option("--marketplace <marketplaceId>", "default marketplace for the authorization request", "EBAY_US")
-    .option("--no-open", "do not open the authorization URL in a browser")
+    .option("--no-open", "print the authorization URL instead of opening a browser")
     .option("--timeout-seconds <seconds>", "how long to wait for the callback", "180")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       const authResult = await authenticateWithEbayLocally(profile, {
         environment: options.environment,
         marketplaceId: options.marketplace,
         shouldOpen: options.open,
         timeoutMs: Number(options.timeoutSeconds) * 1000
       });
-      upsertBackendProfile({ name: global.profile, ebaySession: authResult.session });
-      renderResult({ authorize: authResult.authorize, opened: authResult.opened, connection: authResult.session }, Boolean(global.json));
+      upsertProfile({ name: global.profile, ebaySession: authResult.session });
+      renderResult(
+        { authorize: authResult.authorize, opened: authResult.opened, connection: redactSessionForOutput(authResult.session) },
+        Boolean(global.json)
+      );
     });
 
   auth
@@ -169,7 +176,7 @@ export function createCli(): Command {
     .description("Show the current locally-connected eBay account")
     .action(async (_, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       renderConnectionStatus(await getLocalConnectionStatus(profile), Boolean(global.json));
     });
 
@@ -201,7 +208,7 @@ export function createCli(): Command {
             "Third-party app access",
             "View"
           ],
-          note: "eBay does not publish a supported OAuth revoke API for this flow. To fully revoke the grant, remove the app in My eBay after clearing the local session."
+          note: "This CLI does not currently call eBay's token-revocation endpoint. To fully revoke the grant, remove the app in My eBay after clearing the local session."
         },
         Boolean(global.json)
       );
@@ -213,7 +220,7 @@ export function createCli(): Command {
     .description("Check whether the connected eBay account is ready to list")
     .action(async (_, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       renderDoctorReport(await runLocalDoctor(profile), Boolean(global.json));
     });
 
@@ -224,7 +231,7 @@ export function createCli(): Command {
     .description("Opt the connected eBay account into a seller program such as business policies")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       renderResult(await optInLocalPolicyProgram(profile, options.programType), Boolean(global.json));
     });
 
@@ -237,7 +244,7 @@ export function createCli(): Command {
     .description("Sync business policy defaults and persist local defaults")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       const result = await syncLocalPolicies(profile, {
         paymentPolicyId: options.paymentPolicyId,
         returnPolicyId: options.returnPolicyId,
@@ -255,7 +262,7 @@ export function createCli(): Command {
     .description("Create or update the default location")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       const result = await createOrSetLocalLocation(profile, { key: options.key, file: options.file });
       renderResult(result.result, Boolean(global.json));
     });
@@ -270,7 +277,7 @@ export function createCli(): Command {
     .description("List listings for the connected eBay account")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       renderListings(
         await listLocalListings(profile, {
           status: options.status,
@@ -288,7 +295,7 @@ export function createCli(): Command {
     .description("Resolve a listing and show the normalized spec")
     .action(async (reference, _options, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       renderResult(await getLocalListing(profile, reference), Boolean(global.json));
     });
 
@@ -299,7 +306,7 @@ export function createCli(): Command {
     .description("Export a normalized listing spec")
     .action(async (reference, options, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       const spec = await pullLocalListing(profile, reference, options.out);
       renderResult({ out: options.out, spec }, Boolean(global.json));
     });
@@ -313,7 +320,7 @@ export function createCli(): Command {
     .description("Plan or create a listing")
     .action(async (options, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       const request = {
         ...(await parseListingSpecFile(options.file)),
         ...(options.writePath ? { writePath: normalizeWritePathOption(options.writePath) } : {})
@@ -340,7 +347,7 @@ export function createCli(): Command {
     .description("Plan or apply a listing update")
     .action(async (reference, options, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       const request = await parseListingPatchFile(options.file);
       if (!options.apply) {
         renderMutationPlan(await updateLocalListingPlan(profile, reference, request), Boolean(global.json));
@@ -356,7 +363,7 @@ export function createCli(): Command {
     .description("Plan or withdraw a listing")
     .action(async (reference, options, command: Command) => {
       const global = getGlobalOptions(command);
-      const profile = requireConfiguredBackendProfile(global.profile);
+      const profile = requireConfiguredProfile(global.profile);
       if (!options.apply) {
         renderMutationPlan(await endLocalListingPlan(profile, reference), Boolean(global.json));
         return;
@@ -367,7 +374,7 @@ export function createCli(): Command {
   return program;
 }
 
-export function buildConfigStatusForOutput(profile: ReturnType<typeof resolveBackendProfile>) {
+export function buildConfigStatusForOutput(profile: ReturnType<typeof resolveProfile>) {
   const configured = {
     backendBaseUrl: Boolean(profile.backendBaseUrl),
     ebaySession: Boolean(profile.ebaySession)

@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ebaycli-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-06",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "AUTH_DB",
+      "database_name": "ebaycli-relay-auth",
+      "database_id": "462b6b50-ed6a-4666-ab43-b12353f47346",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
+  "triggers": { "crons": ["*/30 * * * *"] },
+  "vars": {
+    "SELLER_ACCESS_MODE": "restricted",
+    "PUBLIC_BASE_URL": "https://ebaycli-relay.developmentjgonz.workers.dev",
+    "LEGAL_COMPANY_NAME": "ebaycli",
+    "LEGAL_CONTACT_EMAIL": "developmentjgonz@gmail.com",
+    "LEGAL_WEBSITE_URL": "https://github.com/developmentjgonz/ebaycli",
+    "LEGAL_EFFECTIVE_DATE": "2026-10-06"
+  }
+}

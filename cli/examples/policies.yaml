@@ -1,3 +1,4 @@
+# Policy creation writes to eBay immediately. Review all terms before use.
 paymentPolicy:
   marketplaceId: EBAY_US
   name: CLI Payment Policy
@@ -20,7 +21,8 @@ fulfillmentPolicy:
       costType: FLAT_RATE
       shippingServices:
         - shippingCarrierCode: USPS
-          shippingServiceCode: USPSGroundAdvantage
+          # Confirm supported service codes and rates for your marketplace.
+          shippingServiceCode: USPSPriority
           shippingCost:
             value: "9.99"
             currency: USD
@@ -31,9 +33,8 @@ returnPolicy:
     - name: ALL_EXCLUDING_MOTORS_VEHICLES
       default: true
   returnsAccepted: true
-  returnMethod: MONEY_BACK
   returnPeriod:
     unit: DAY
     value: 30
-  refundMethod: MONEY_BACK
-  shippingCostPayer: BUYER
+  # Money-back refunds are the default. returnMethod is only for replacements.
+  returnShippingCostPayer: BUYER

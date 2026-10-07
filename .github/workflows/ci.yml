@@ -1,0 +1,121 @@
+name: Checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secrets / full history and current files
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_LINUX_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pinned official Gitleaks binary
+        run: |
+          gitleaks_archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl --fail --location --silent --show-error --retry 3 \
+            --proto '=https' --proto-redir '=https' \
+            --output "$RUNNER_TEMP/$gitleaks_archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${gitleaks_archive}"
+          printf '%s  %s\n' "$GITLEAKS_LINUX_SHA256" "$RUNNER_TEMP/$gitleaks_archive" | sha256sum --check --strict
+          tar --extract --gzip --file "$RUNNER_TEMP/$gitleaks_archive" --directory "$RUNNER_TEMP" gitleaks
+      - name: Scan all Git history with redacted output
+        run: >-
+          "$RUNNER_TEMP/gitleaks" git --redact=100 --no-banner
+          --ignore-gitleaks-allow --max-decode-depth=2 --log-opts=--all .
+      - name: Scan current repository files with redacted output
+        run: >-
+          "$RUNNER_TEMP/gitleaks" dir --redact=100 --no-banner
+          --ignore-gitleaks-allow --max-decode-depth=2 .
+
+  cli:
+    name: CLI / ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22, 24]
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - run: npm ci
+      - run: npm run check
+
+  relay:
+    name: Worker / Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run db:migrate:local
+
+  integration:
+    name: Two-seller CLI and relay integration
+    runs-on: ubuntu-latest
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            cli/package-lock.json
+            backend/package-lock.json
+      - run: npm --prefix cli ci
+      - run: npm --prefix backend ci
+      - run: npm --prefix cli run build
+      - run: npm --prefix backend run build
+      - run: node scripts/check-integration.mjs
+
+  documentation:
+    name: Documentation and npm package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cli/package-lock.json
+      - run: npm --prefix cli ci
+      - run: npm --prefix cli run build
+      - run: node scripts/check-docs.mjs

@@ -1,0 +1,14 @@
+# Local-only secrets. Copy to .dev.vars; never commit the populated file.
+PUBLIC_BASE_URL=http://localhost:8787
+TOKEN_ENCRYPTION_KEY=replace-with-base64-encoded-32-byte-key
+# Keep OAuth restricted to your own account first. This is an immutable eBay
+# commerce.identity userId, not a username or app client ID. Add invited IDs as CSV.
+SELLER_ACCESS_MODE=restricted
+ALLOWED_EBAY_USER_IDS=
+EBAY_SANDBOX_CLIENT_ID=
+EBAY_SANDBOX_CLIENT_SECRET=
+EBAY_SANDBOX_RUNAME=
+EBAY_PRODUCTION_CLIENT_ID=
+EBAY_PRODUCTION_CLIENT_SECRET=
+EBAY_PRODUCTION_RUNAME=
+EBAY_NOTIFICATION_VERIFICATION_TOKEN=

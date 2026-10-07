@@ -6,26 +6,24 @@ type GuideTopic =
   | "agent-notes";
 
 const LISTING_SPEC_EXAMPLE = {
-  sku: "GENGAR-38-PLUSH-001",
+  sku: "SAMPLE-SKU-001",
   writePath: "INVENTORY",
-  title: "Pokemon Gengar Plush 38 Inch Purple Character Pillow New",
+  title: "Brass desk lamp",
   description:
-    "Large 38 inch Gengar plush pillow in new condition. Confirm exact measurements, tag details, and brand before publishing.",
-  categoryId: "2624",
-  condition: "NEW",
+    "Brass desk lamp with tested wiring and minor cosmetic wear. Confirm measurements and condition before publishing.",
+  categoryId: "262197",
+  condition: "USED_EXCELLENT",
   priceValue: 89.99,
   priceCurrency: "USD",
   availableQuantity: 1,
   images: [
     {
-      path: "./photos/gengar-front.jpg"
+      path: "./photos/lamp-front.jpg"
     }
   ],
   aspects: {
-    Character: ["Gengar"],
-    Franchise: ["Pokemon"],
-    Color: ["Purple"],
-    Type: ["Plush Toy"]
+    Brand: ["Unbranded"],
+    Type: ["Desk Lamp"]
   }
 };
 
@@ -67,13 +65,15 @@ function buildOverviewGuide() {
   return {
     model: "backend-relay-local-cli",
     summary:
-      "The CLI stores the eBay seller session locally and keeps listing/setup logic local. Production OAuth uses a backend relay because eBay requires a public HTTPS redirect URL.",
+      "The CLI stores the eBay seller session locally and keeps listing/setup logic local. Sandbox and production OAuth use a deployment-owned relay with a public HTTPS callback.",
     authModel: {
       mode: "backend-relay",
       setup: [
         "Run `ebay config set --backend-url https://your-backend.example.com --json`.",
         "Run `ebay auth login --environment production --json` and complete the eBay consent flow.",
-        "Do not configure eBay app credentials in the CLI; the backend owns OAuth credentials and callback handling."
+        "Do not configure eBay app credentials in the CLI; the backend owns OAuth credentials and callback handling.",
+        "Use the same `--profile NAME` for connection and later operations; keep sandbox and production in separate profiles.",
+        "Complete consent in a browser on the machine running the CLI so the redirect reaches its localhost listener. `auth login --no-open` prints the consent URL to stderr before waiting."
       ]
     },
     topics: ["capabilities", "workflows", "listing-spec", "agent-notes"],
@@ -97,13 +97,15 @@ function buildCapabilitiesGuide() {
     config: [
       {
         command: "ebay config set --backend-url <url>",
-        purpose: "Set the production backend relay URL used for eBay OAuth callback, token exchange, privacy, and required hosted surfaces."
+        purpose: "Set the deployment-owned relay URL used for sandbox/production OAuth callback and token exchange."
       },
     ],
     auth: [
       {
         command: "ebay auth login",
-        purpose: "Run eBay OAuth through the configured backend relay and store the returned seller session in the selected CLI profile."
+        purpose: "Run eBay OAuth through the configured backend relay and store the returned seller session in the selected CLI profile.",
+        flags: ["--environment production|sandbox", "--no-open", "--timeout-seconds <seconds>"],
+        notes: ["Browser consent must complete on the same machine as the CLI. `--no-open` prints the URL to stderr while the CLI waits for the localhost callback."]
       },
       {
         command: "ebay auth status",
@@ -132,15 +134,16 @@ function buildCapabilitiesGuide() {
       },
       {
         command: "ebay setup policies sync",
-        purpose: "Read or set default business policy ids for Inventory-based listing flows."
+        purpose: "Read or set default business policy ids for Inventory-based listing flows.",
+        notes: ["`--create-from <file>` creates policies on eBay immediately. This setup command has no plan or `--apply` mode."]
       },
       {
         command: "ebay setup policies opt-in",
-        purpose: "Attempt seller program opt-in for Business Policies."
+        purpose: "Attempt seller program opt-in for Business Policies immediately; no plan or `--apply` mode."
       },
       {
         command: "ebay setup location set",
-        purpose: "Create or update the default merchant location for Inventory-based listing flows."
+        purpose: "With `--file`, create or update an eBay merchant location immediately. With `--key`, save an existing location as the local default. No plan or `--apply` mode."
       }
     ],
     listings: [
@@ -159,11 +162,12 @@ function buildCapabilitiesGuide() {
       },
       {
         command: "ebay listings create --file <draft.yaml>",
-        purpose: "Plan a new listing create. Use `writePath` or `--write-path` to target INVENTORY or TRADING explicitly."
+        purpose: "Plan a new listing create. Defaults to INVENTORY; use `writePath` or `--write-path` to target INVENTORY or TRADING explicitly. Add `--apply` to execute the reviewed change."
       },
       {
-        command: "ebay listings create --file <draft.yaml> --verify",
-        purpose: "Validate a Trading create payload remotely without creating the listing."
+        command: "ebay listings create --file <draft.yaml> --write-path TRADING --verify --json",
+        purpose: "Validate a Trading create payload remotely without creating the listing; local images may be uploaded.",
+        notes: ["Inventory remote verification is not implemented: `--verify` returns `verified: false` with a plan. Do not combine `--verify` with `--apply`."]
       },
       {
         command: "ebay listings update <reference> --file <patch.yaml>",
@@ -184,6 +188,10 @@ function buildWorkflowGuide() {
         "Run `ebay config set --backend-url https://your-backend.example.com --json` first.",
         "Run `ebay auth login --environment production --json` and finish the eBay consent flow in the browser.",
         "Run `ebay status --json` to verify the local session and seller readiness in one call."
+      ],
+      notes: [
+        "These commands select the default production profile. Add the same `--profile NAME` to every command when selecting another profile, and use `--environment sandbox` for sandbox login.",
+        "Consent must complete in a browser on the CLI's machine. `auth login --no-open` prints the URL to stderr before waiting; a pasted callback-code workflow is not supported."
       ]
     },
     disconnect: {
@@ -196,7 +204,7 @@ function buildWorkflowGuide() {
     sellerReadiness: {
       steps: [
         "Run `ebay status --json` or `ebay setup doctor --json`.",
-        "If Business Policies or location are missing, use `ebay setup policies sync` and `ebay setup location set` where the account supports them.",
+        "If Business Policies or location are missing, use `ebay setup policies sync` and `ebay setup location set` where the account supports them. Policy creation, program opt-in, and location creation/update act immediately; review their inputs first.",
         "If eBay rejects policy setup, reads can still work, but Inventory create/update may remain blocked."
       ]
     },
@@ -212,8 +220,9 @@ function buildWorkflowGuide() {
       steps: [
         "Create a YAML draft matching the listing-spec guide.",
         "Run `ebay listings create --file draft.yaml` to inspect the mutation plan.",
-        "Run `ebay listings create --file draft.yaml --verify` when validating a Trading/classic create before any destructive action.",
-        "Only run `ebay listings create --file draft.yaml --apply` after reviewing images, policies, category, and condition."
+        "For a Trading/classic draft, run `ebay listings create --file draft.yaml --write-path TRADING --verify --json` to validate with eBay without publishing; local images may be uploaded.",
+        "Inventory remote verification is not implemented; an Inventory `--verify` result with `verified: false` is a plan, not validation success.",
+        "Only run `ebay listings create --file draft.yaml --apply` after reviewing images, policies, category, and condition and authorizing the seller's change. Do not combine `--verify` and `--apply`."
       ]
     },
     reviseExisting: {
@@ -255,7 +264,8 @@ function buildListingSpecGuide() {
     imageRules: [
       "Each image entry can be a URL string.",
       "Each image entry can be a local path string.",
-      "Each image entry can be an object with `url`, `path`, or `base64Content`."
+      "Each image entry can be an object with `url`, `path`, or `base64Content`.",
+      "Relative image paths resolve from the draft or patch file's directory. Trading `--verify` may upload local images."
     ],
     conditionNotes: [
       "Some categories require `conditionDescriptors` in addition to `condition`.",
@@ -274,6 +284,9 @@ function buildAgentNotesGuide() {
       "Use `ebay guide listing-spec --json` before generating listing drafts.",
       "Use `ebay listings pull <reference> --out <file>` to ground updates on an existing listing.",
       "Prefer plan commands before apply commands.",
+      "Apply only seller-authorized changes. OAuth grants API access; it does not review a draft or approve each later mutation.",
+      "Use the same `--profile NAME` throughout a workflow, with separate sandbox and production profiles.",
+      "Profiles select local sessions; they are not tenant isolation. Concurrent agents should use separate `XDG_CONFIG_HOME` directories or serialize profile saves because the profile file has no cross-process write lock.",
       "Treat numeric references as listing ids unless a sku or offer prefix is supplied.",
       "Do not assume `ebay auth logout` revokes the eBay grant. Use `ebay auth disconnect` and follow the My eBay revoke path when you want the grant removed."
     ],
@@ -287,7 +300,8 @@ function buildAgentNotesGuide() {
       "Run `ebay setup doctor --json` before attempting create/apply on a new account.",
       "Do not assume Business Policies are available just because OAuth works.",
       "Use plan output to confirm whether the CLI intends to use Trading or Inventory before apply.",
-      "For Trading/classic creates, prefer `--verify` before ending or replacing a live listing."
+      "Policy creation, program opt-in, and location creation/update act immediately and have no listing `--apply` gate.",
+      "For Trading/classic creates, use `--write-path TRADING --verify` before publishing; local images may be uploaded. Inventory remote verification is not implemented."
     ]
   };
 }
