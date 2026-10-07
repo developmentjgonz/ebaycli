@@ -60,7 +60,7 @@ The relay exposes public health, readiness, privacy, auth landing, agent metadat
 
 ## Migrating from the .NET reference backend
 
-The Worker keeps the login/exchange/refresh contract and eBay scope defaults. Existing local profile files require no migration. To move a deployment, use the same eBay app keyset and environment, configure its registered callback URLs for the new relay, then update `backendBaseUrl` through `ebay config set`.
+The Worker keeps the login/exchange/refresh contract. Its default scopes omit the unused `sell.fulfillment.readonly` permission. Existing local profile files require no migration. To move a deployment, use the same eBay app keyset and environment, configure its registered callback URLs for the new relay, then update `backendBaseUrl` through `ebay config set`.
 
 Restart any login already in progress during the switch; temporary .NET auth-state rows are not imported into D1. Keep old infrastructure until the new relay has been verified with your account.
 
