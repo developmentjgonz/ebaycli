@@ -94,7 +94,14 @@ For `ALLOWED_EBAY_USER_IDS`, enter the immutable Commerce Identity user ID for y
 ebay --profile YOUR_PROFILE auth status --json
 ```
 
-That command contacts eBay and can refresh through the profile's configured relay. Confirm it is your account. If no working profile exists, obtain a User access token for your own account through your eBay developer application's token flow and privately call the [Commerce Identity `getUser` endpoint](https://developer.ebay.com/api-docs/commerce/identity/resources/user/methods/getUser) to read `userId`. Keep the token out of Git, model prompts, and shared logs. Until the ID is known, leave OAuth inactive; do not enable open access or trust the first login as the owner.
+That command contacts eBay and can refresh through the profile's configured relay. Confirm it is your account. If no working profile exists, use eBay's own browser tools to obtain the ID without putting a bearer token in a command argument:
+
+1. Open the [official API Explorer](https://developer.ebay.com/my/api_test_tool), select **Production** and your own production app keyset, then choose **Identity API** and **getUser**.
+2. Obtain a **User access token** for your own seller account through the developer token/consent flow or **Get OAuth User Token** option. Request `https://api.ebay.com/oauth/api_scope/commerce.identity.readonly`, plus the base `https://api.ebay.com/oauth/api_scope` only if the flow requires it. Keep the token inside eBay's tools; if needed, enter it in API Explorer's **Headers** tab, in the Authorization bearer-token field. Do not use an application access token.
+3. Confirm the request is `GET https://apiz.ebay.com/commerce/identity/v1/user/`, then execute it. Read `userId` from the successful [Commerce Identity `getUser` response](https://developer.ebay.com/api-docs/commerce/identity/resources/user/methods/getUser).
+4. Enter that ID privately through `npx wrangler secret put ALLOWED_EBAY_USER_IDS`. Keep the bearer token out of Git, chat, model prompts, command arguments, and shared logs.
+
+Until the ID is known, leave OAuth inactive; do not enable open access or trust the first login as the owner.
 
 Use a comma-separated secret value for multiple verified IDs, such as your sandbox and production accounts or later invited sellers. The Worker compares IDs exactly against the identity returned by eBay during login and refresh. Removing an ID blocks future handoffs and refreshes; already-issued access tokens remain usable until expiry or eBay-side revocation.
 
