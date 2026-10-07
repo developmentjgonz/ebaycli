@@ -469,14 +469,10 @@ export class EbayApiClient {
           if (isRevokedAuthResponse(response.status, payload)) {
             throw new AppError(
               "AUTH_REVOKED",
-              "The stored eBay authorization is no longer valid. Run `ebay auth login --environment production --json` to reconnect.",
+              "The stored eBay authorization is no longer valid.",
               {
                 status: response.status,
-                response: payload,
-                nextCommands: [
-                  "ebay auth login --environment production --json",
-                  "ebay status --json"
-                ]
+                response: payload
               }
             );
           }

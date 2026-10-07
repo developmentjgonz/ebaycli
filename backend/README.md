@@ -66,6 +66,8 @@ Non-secret defaults are in [wrangler.jsonc](wrangler.jsonc); local overrides/sec
 
 Only configure an eBay environment you intend to enable. Keep the same encryption key across deployments while temporary handoffs are pending; replacing it prevents existing encrypted handoffs from being read. D1 does not serve as a permanent seller-session store: the CLI receives and stores the seller session after exchange.
 
+Default scopes cover the base API, seller account, inventory, and read-only Commerce Identity. The current CLI does not request an unused Fulfillment permission. Confirm those scopes are available to the chosen app keyset; restricted access requires a successful eBay identity lookup. Readiness checks do not establish live API access. eBay documents scope-controlled identity access in its [Other APIs guide](https://developer.ebay.com/develop/guides/sell/other-apis-guide).
+
 ### Seller access
 
 An absent `SELLER_ACCESS_MODE` means `restricted`; unknown values fail closed. Restricted OAuth stays inactive when `ALLOWED_EBAY_USER_IDS` is empty. After eBay consent or refresh, the Worker reads the account's `userId` from the eBay Commerce Identity API and compares it exactly against the allowlist before returning any seller session. A username, caller-supplied ID, or first successful login cannot establish ownership. Denied login returns `seller_not_allowed` to the waiting CLI; denied refresh returns HTTP 403 with the same error title. The final one-time handoff also checks the current allowlist.
@@ -174,6 +176,7 @@ No historical auth-state rows need to be copied from the previous database into 
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| GET | `/` | Public setup portal with live relay checks and Grok Bot connection instructions |
 | GET | `/health` | Liveness |
 | GET | `/ready` | D1 and relay configuration readiness, including seller-access configuration |
 | GET | `/llms.txt` | Runtime relay discovery |

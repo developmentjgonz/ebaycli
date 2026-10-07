@@ -167,6 +167,67 @@ describe("local eBay operations", () => {
     }
   });
 
+  it.each([
+    ["sandbox-seller", 401],
+    ["seller's sandbox $(echo unsafe)", 403]
+  ] as const)("keeps the selected profile and active sandbox session in direct API revocation guidance for %s", async (name, status) => {
+    const dir = useIsolatedConfigHome();
+    const session = {
+      environment: "sandbox",
+      marketplaceId: "EBAY_US",
+      accessToken: "sandbox-access-token",
+      refreshToken: "sandbox-refresh-token",
+      accessTokenExpiresAtUtc: "2099-01-01T00:00:00Z"
+    };
+    const defaultProfile = upsertProfile({
+      name: "default",
+      ebaySession: { ...session, environment: "production", accessToken: "default-access-token" }
+    });
+    const profile = upsertProfile({
+      name,
+      backendBaseUrl: "https://backend.example.test",
+      ebaySession: session
+    });
+    const payload = JSON.stringify({ errors: [{ message: "invalid_token: authorization revoked" }] });
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("https://apiz.sandbox.ebay.com/commerce/identity/v1/user/");
+      expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer sandbox-access-token");
+      return new Response(payload, { status });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const quotedName = name === "sandbox-seller" ? name
+      : process.platform === "win32" ? "'seller''s sandbox $(echo unsafe)'"
+        : "'seller'\\''s sandbox $(echo unsafe)'";
+    const login = `ebay --profile ${quotedName} auth login --environment sandbox --json`;
+
+    try {
+      // A caller may hold a profile snapshot from before the persisted session changed.
+      await expect(getLocalConnectionStatus({
+        ...profile,
+        ebaySession: { ...session, environment: "production" }
+      })).rejects.toMatchObject({
+        code: "AUTH_REVOKED",
+        message: `The stored eBay authorization is no longer valid. Run \`${login}\` to reconnect.`,
+        details: {
+          status,
+          response: payload,
+          nextCommands: [login, `ebay --profile ${quotedName} status --json`]
+        },
+        exitCode: 1
+      });
+      const profiles = loadProfiles();
+      expect(profiles.find(saved => saved.name === name)).toMatchObject({
+        name,
+        backendBaseUrl: "https://backend.example.test"
+      });
+      expect(profiles.find(saved => saved.name === name)?.ebaySession).toBeUndefined();
+      expect(profiles.find(saved => saved.name === "default")).toEqual(defaultProfile);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
 
   it("persists local policy defaults and location defaults from seller API responses", async () => {
     const dir = useIsolatedConfigHome();

@@ -187,6 +187,20 @@ describe("EbayApiClient retry safety", () => {
     ["Trading listing creation", api => api.addFixedPriceItem("token", "EBAY_US", { Item: { SKU: "SKU-1" } })]
   ];
 
+  it("preserves revoked authorization details for the runtime to add profile guidance", async () => {
+    const payload = JSON.stringify({ errors: [{ message: "invalid_token" }] });
+    const fetch = vi.fn().mockResolvedValue(new Response(payload, { status: 401 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(client().getUser("token")).rejects.toMatchObject({
+      code: "AUTH_REVOKED",
+      message: "The stored eBay authorization is no longer valid.",
+      details: { status: 401, response: payload },
+      exitCode: 1
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it("retries safe reads after network failures and stops after three attempts", async () => {
     vi.useFakeTimers();
     const error = new TypeError("Connection closed");

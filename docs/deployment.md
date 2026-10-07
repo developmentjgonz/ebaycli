@@ -4,6 +4,8 @@ The CLI runs on your machine. The optional reference backend runs directly on Cl
 
 Workers supplies the HTTP runtime and secret bindings; D1 supplies the SQL state. This layout follows Cloudflare's [Workers configuration](https://developers.cloudflare.com/workers/wrangler/configuration/) and [D1 setup](https://developers.cloudflare.com/d1/get-started/) model.
 
+The owner's [reference setup portal](https://ebaycli-relay.developmentjgonz.workers.dev) is deployed. Its OAuth is intentionally inactive pending the app credentials and permitted owner ID; it is not a shared public login service. Forks must create their own database and configure their own origin and secrets.
+
 ## Before you start
 
 You need a Cloudflare account, a current Node.js 22.13+ release, and your own eBay developer app keyset. The backend is deployment-owned: do not treat this repository as a shared public credential broker. Start with your own seller account; the Worker defaults to restricted access by immutable seller ID.
@@ -81,6 +83,8 @@ npx wrangler secret put EBAY_NOTIFICATION_VERIFICATION_TOKEN
 ```
 
 For production, also configure `EBAY_PRODUCTION_CLIENT_ID`, `EBAY_PRODUCTION_CLIENT_SECRET`, and `EBAY_PRODUCTION_RUNAME`. You only need credentials for the environments your deployment serves.
+
+Check that the app keyset can request the default base, seller account, inventory, and `commerce.identity.readonly` scopes. The relay needs a successful identity lookup to enforce seller restrictions; configuration readiness alone does not verify eBay API access. Consult [eBay's scope-controlled Identity guidance](https://developer.ebay.com/develop/guides/sell/other-apis-guide) if the app cannot obtain that scope.
 
 Each `wrangler secret put` prompts for a value and deploys an updated Worker version. Local `.dev.vars` contents are not uploaded automatically.
 

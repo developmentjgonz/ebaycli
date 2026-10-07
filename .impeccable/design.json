@@ -1,0 +1,461 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-07T03:16:11.637816Z",
+  "title": "Design System: ebaycli Relay Setup",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Rust",
+        "tonalRamp": [
+          "oklch(15% 0.14032 34.57)",
+          "oklch(26% 0.14032 34.57)",
+          "oklch(37% 0.14032 34.57)",
+          "oklch(49% 0.14032 34.57)",
+          "oklch(60% 0.14032 34.57)",
+          "oklch(72% 0.14032 34.57)",
+          "oklch(83% 0.14032 34.57)",
+          "oklch(95% 0.14032 34.57)"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Rust hover",
+        "tonalRamp": [
+          "oklch(15% 0.12605 34.58)",
+          "oklch(26% 0.12605 34.58)",
+          "oklch(37% 0.12605 34.58)",
+          "oklch(49% 0.12605 34.58)",
+          "oklch(60% 0.12605 34.58)",
+          "oklch(72% 0.12605 34.58)",
+          "oklch(83% 0.12605 34.58)",
+          "oklch(95% 0.12605 34.58)"
+        ]
+      },
+      "accent-active": {
+        "role": "primary",
+        "displayName": "Rust pressed",
+        "tonalRamp": [
+          "oklch(15% 0.11015 35.24)",
+          "oklch(26% 0.11015 35.24)",
+          "oklch(37% 0.11015 35.24)",
+          "oklch(49% 0.11015 35.24)",
+          "oklch(60% 0.11015 35.24)",
+          "oklch(72% 0.11015 35.24)",
+          "oklch(83% 0.11015 35.24)",
+          "oklch(95% 0.11015 35.24)"
+        ]
+      },
+      "nav": {
+        "role": "primary",
+        "displayName": "Deep green navigation",
+        "tonalRamp": [
+          "oklch(15% 0.02846 206.81)",
+          "oklch(26% 0.02846 206.81)",
+          "oklch(37% 0.02846 206.81)",
+          "oklch(49% 0.02846 206.81)",
+          "oklch(60% 0.02846 206.81)",
+          "oklch(72% 0.02846 206.81)",
+          "oklch(83% 0.02846 206.81)",
+          "oklch(95% 0.02846 206.81)"
+        ]
+      },
+      "nav-hover": {
+        "role": "primary",
+        "displayName": "Navigation hover",
+        "tonalRamp": [
+          "oklch(15% 0.03741 206.27)",
+          "oklch(26% 0.03741 206.27)",
+          "oklch(37% 0.03741 206.27)",
+          "oklch(49% 0.03741 206.27)",
+          "oklch(60% 0.03741 206.27)",
+          "oklch(72% 0.03741 206.27)",
+          "oklch(83% 0.03741 206.27)",
+          "oklch(95% 0.03741 206.27)"
+        ]
+      },
+      "nav-active": {
+        "role": "primary",
+        "displayName": "Navigation selected",
+        "tonalRamp": [
+          "oklch(15% 0.03372 198.73)",
+          "oklch(26% 0.03372 198.73)",
+          "oklch(37% 0.03372 198.73)",
+          "oklch(49% 0.03372 198.73)",
+          "oklch(60% 0.03372 198.73)",
+          "oklch(72% 0.03372 198.73)",
+          "oklch(83% 0.03372 198.73)",
+          "oklch(95% 0.03372 198.73)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "tonalRamp": [
+          "oklch(15% 0.00660 106.52)",
+          "oklch(26% 0.00660 106.52)",
+          "oklch(37% 0.00660 106.52)",
+          "oklch(49% 0.00660 106.52)",
+          "oklch(60% 0.00660 106.52)",
+          "oklch(72% 0.00660 106.52)",
+          "oklch(83% 0.00660 106.52)",
+          "oklch(95% 0.00660 106.52)"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "tonalRamp": [
+          "oklch(15% 0.00000 0.00)",
+          "oklch(26% 0.00000 0.00)",
+          "oklch(37% 0.00000 0.00)",
+          "oklch(49% 0.00000 0.00)",
+          "oklch(60% 0.00000 0.00)",
+          "oklch(72% 0.00000 0.00)",
+          "oklch(83% 0.00000 0.00)",
+          "oklch(95% 0.00000 0.00)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "tonalRamp": [
+          "oklch(15% 0.02432 209.07)",
+          "oklch(26% 0.02432 209.07)",
+          "oklch(37% 0.02432 209.07)",
+          "oklch(49% 0.02432 209.07)",
+          "oklch(60% 0.02432 209.07)",
+          "oklch(72% 0.02432 209.07)",
+          "oklch(83% 0.02432 209.07)",
+          "oklch(95% 0.02432 209.07)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted text",
+        "tonalRamp": [
+          "oklch(15% 0.01978 205.76)",
+          "oklch(26% 0.01978 205.76)",
+          "oklch(37% 0.01978 205.76)",
+          "oklch(49% 0.01978 205.76)",
+          "oklch(60% 0.01978 205.76)",
+          "oklch(72% 0.01978 205.76)",
+          "oklch(83% 0.01978 205.76)",
+          "oklch(95% 0.01978 205.76)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Divider",
+        "tonalRamp": [
+          "oklch(15% 0.00930 150.68)",
+          "oklch(26% 0.00930 150.68)",
+          "oklch(37% 0.00930 150.68)",
+          "oklch(49% 0.00930 150.68)",
+          "oklch(60% 0.00930 150.68)",
+          "oklch(72% 0.00930 150.68)",
+          "oklch(83% 0.00930 150.68)",
+          "oklch(95% 0.00930 150.68)"
+        ]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Success green",
+        "tonalRamp": [
+          "oklch(15% 0.08628 156.67)",
+          "oklch(26% 0.08628 156.67)",
+          "oklch(37% 0.08628 156.67)",
+          "oklch(49% 0.08628 156.67)",
+          "oklch(60% 0.08628 156.67)",
+          "oklch(72% 0.08628 156.67)",
+          "oklch(83% 0.08628 156.67)",
+          "oklch(95% 0.08628 156.67)"
+        ]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Warning ochre",
+        "tonalRamp": [
+          "oklch(15% 0.09236 68.06)",
+          "oklch(26% 0.09236 68.06)",
+          "oklch(37% 0.09236 68.06)",
+          "oklch(49% 0.09236 68.06)",
+          "oklch(60% 0.09236 68.06)",
+          "oklch(72% 0.09236 68.06)",
+          "oklch(83% 0.09236 68.06)",
+          "oklch(95% 0.09236 68.06)"
+        ]
+      },
+      "error": {
+        "role": "semantic",
+        "displayName": "Error red",
+        "tonalRamp": [
+          "oklch(15% 0.15045 21.29)",
+          "oklch(26% 0.15045 21.29)",
+          "oklch(37% 0.15045 21.29)",
+          "oklch(49% 0.15045 21.29)",
+          "oklch(60% 0.15045 21.29)",
+          "oklch(72% 0.15045 21.29)",
+          "oklch(83% 0.15045 21.29)",
+          "oklch(95% 0.15045 21.29)"
+        ]
+      },
+      "focus": {
+        "role": "semantic",
+        "displayName": "Focus blue",
+        "tonalRamp": [
+          "oklch(15% 0.12426 253.92)",
+          "oklch(26% 0.12426 253.92)",
+          "oklch(37% 0.12426 253.92)",
+          "oklch(49% 0.12426 253.92)",
+          "oklch(60% 0.12426 253.92)",
+          "oklch(72% 0.12426 253.92)",
+          "oklch(83% 0.12426 253.92)",
+          "oklch(95% 0.12426 253.92)"
+        ]
+      },
+      "status-neutral": {
+        "role": "neutral",
+        "displayName": "Pending surface",
+        "tonalRamp": [
+          "oklch(15% 0.00509 145.54)",
+          "oklch(26% 0.00509 145.54)",
+          "oklch(37% 0.00509 145.54)",
+          "oklch(49% 0.00509 145.54)",
+          "oklch(60% 0.00509 145.54)",
+          "oklch(72% 0.00509 145.54)",
+          "oklch(83% 0.00509 145.54)",
+          "oklch(95% 0.00509 145.54)"
+        ]
+      },
+      "status-good": {
+        "role": "semantic",
+        "displayName": "Success surface",
+        "tonalRamp": [
+          "oklch(15% 0.01821 155.81)",
+          "oklch(26% 0.01821 155.81)",
+          "oklch(37% 0.01821 155.81)",
+          "oklch(49% 0.01821 155.81)",
+          "oklch(60% 0.01821 155.81)",
+          "oklch(72% 0.01821 155.81)",
+          "oklch(83% 0.01821 155.81)",
+          "oklch(95% 0.01821 155.81)"
+        ]
+      },
+      "status-warning": {
+        "role": "semantic",
+        "displayName": "Warning surface",
+        "tonalRamp": [
+          "oklch(15% 0.03660 80.63)",
+          "oklch(26% 0.03660 80.63)",
+          "oklch(37% 0.03660 80.63)",
+          "oklch(49% 0.03660 80.63)",
+          "oklch(60% 0.03660 80.63)",
+          "oklch(72% 0.03660 80.63)",
+          "oklch(83% 0.03660 80.63)",
+          "oklch(95% 0.03660 80.63)"
+        ]
+      },
+      "status-error": {
+        "role": "semantic",
+        "displayName": "Error surface",
+        "tonalRamp": [
+          "oklch(15% 0.01964 17.50)",
+          "oklch(26% 0.01964 17.50)",
+          "oklch(37% 0.01964 17.50)",
+          "oklch(49% 0.01964 17.50)",
+          "oklch(60% 0.01964 17.50)",
+          "oklch(72% 0.01964 17.50)",
+          "oklch(83% 0.01964 17.50)",
+          "oklch(95% 0.01964 17.50)"
+        ]
+      },
+      "command": {
+        "role": "primary",
+        "displayName": "Command green",
+        "tonalRamp": [
+          "oklch(15% 0.02738 207.25)",
+          "oklch(26% 0.02738 207.25)",
+          "oklch(37% 0.02738 207.25)",
+          "oklch(49% 0.02738 207.25)",
+          "oklch(60% 0.02738 207.25)",
+          "oklch(72% 0.02738 207.25)",
+          "oklch(83% 0.02738 207.25)",
+          "oklch(95% 0.02738 207.25)"
+        ]
+      },
+      "command-text": {
+        "role": "neutral",
+        "displayName": "Command text",
+        "tonalRamp": [
+          "oklch(15% 0.01253 149.25)",
+          "oklch(26% 0.01253 149.25)",
+          "oklch(37% 0.01253 149.25)",
+          "oklch(49% 0.01253 149.25)",
+          "oklch(60% 0.01253 149.25)",
+          "oklch(72% 0.01253 149.25)",
+          "oklch(83% 0.01253 149.25)",
+          "oklch(95% 0.01253 149.25)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Page headline",
+        "purpose": "The setup portal page title."
+      },
+      "title": {
+        "displayName": "Section title",
+        "purpose": "Setup and scope headings."
+      },
+      "body": {
+        "displayName": "Interface body",
+        "purpose": "Native interface text and explanation."
+      },
+      "label": {
+        "displayName": "Control label",
+        "purpose": "Main buttons and compact controls."
+      },
+      "command": {
+        "displayName": "Command text",
+        "purpose": "Executable CLI command blocks."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "control-colors",
+        "value": "background 160ms,border-color 160ms",
+        "purpose": "Button hover and pressed colors; disabled by reduced-motion preference."
+      },
+      {
+        "name": "anchor-scroll",
+        "value": "smooth",
+        "purpose": "Section anchor navigation; auto under reduced-motion preference."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "intermediate",
+        "value": "1100px"
+      },
+      {
+        "name": "mobile",
+        "value": "760px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The main Grok handoff action, including its hover, pressed, and keyboard states.",
+      "html": "<button class=\"ds-button ds-primary\" type=\"button\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><rect x=\"7\" y=\"7\" width=\"9\" height=\"10\" rx=\"1.5\"/><path d=\"M12 7V3H3v10h4\"/></svg><span>Copy Grok handoff</span></button>",
+      "css": ".ds-button{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;font-size:13px;font-weight:650;line-height:1.55;border:1px solid #c4cec7;background:var(--white,#fff);color:var(--ink,#17292c);min-height:42px;padding:9px 15px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;cursor:pointer;transition:background 160ms,border-color 160ms;}.ds-primary{background:var(--accent,#a43e26);color:#fff;border-color:transparent;}.ds-primary:hover{background:#8b321d;}.ds-primary:active{background:#742916;}.ds-primary:focus-visible{outline:3px solid var(--focus,#215da0);outline-offset:4px;}.ds-primary svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;}@media(prefers-reduced-motion:reduce){.ds-button{transition:none;}}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "An outlined retry control; disabled is the waiting state.",
+      "html": "<button class=\"ds-button ds-secondary\" type=\"button\">Check again</button>",
+      "css": ".ds-button{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;font-size:13px;font-weight:650;line-height:1.55;border:1px solid #c4cec7;background:var(--white,#fff);color:var(--ink,#17292c);min-height:42px;padding:9px 15px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;cursor:pointer;transition:background 160ms,border-color 160ms;}.ds-secondary:hover{background:#edf2ed;border-color:#a0aea4;}.ds-secondary:active{background:#e0e9e1;}.ds-secondary:focus-visible{outline:3px solid var(--focus,#215da0);outline-offset:4px;}.ds-secondary:disabled{cursor:wait;opacity:.65;}@media(prefers-reduced-motion:reduce){.ds-button{transition:none;}}"
+    },
+    {
+      "name": "Command Copy Button",
+      "kind": "button",
+      "refersTo": "button-copy",
+      "description": "Small outlined control on a dark command surface.",
+      "html": "<div class=\"ds-copy-ground\"><button class=\"ds-copy\" type=\"button\" aria-label=\"Copy store check commands\">Copy</button></div>",
+      "css": ".ds-copy-ground{background:#1b3033;padding:16px 18px;border-radius:9px;}.ds-copy{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;font-size:11px;font-weight:600;line-height:1.55;border:1px solid #527069;background:transparent;color:#e5f1e8;border-radius:5px;min-height:30px;padding:4px 9px;cursor:pointer;}.ds-copy:hover{background:#2d4948;}.ds-copy:focus-visible{outline:3px solid var(--focus,#215da0);outline-offset:4px;}"
+    },
+    {
+      "name": "Environment Select",
+      "kind": "input",
+      "refersTo": "environment-select",
+      "description": "A labeled native select; full width at the mobile breakpoint.",
+      "html": "<div class=\"ds-field\"><label for=\"ds-environment\">eBay environment</label><select id=\"ds-environment\"><option>Production</option><option>Sandbox</option></select></div>",
+      "css": ".ds-field{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--ink,#17292c);}.ds-field label{display:block;font-size:12px;font-weight:650;margin-bottom:6px;}.ds-field select{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;line-height:1.55;border:1px solid #bbc8c0;background:var(--white,#fff);border-radius:8px;padding:8px 33px 8px 12px;color:var(--ink,#17292c);min-height:40px;font-size:13px;width:160px;}.ds-field select:focus-visible{outline:3px solid var(--focus,#215da0);outline-offset:4px;}@media(max-width:760px){.ds-field select{width:100%;}}"
+    },
+    {
+      "name": "Copy Fallback",
+      "kind": "input",
+      "refersTo": "copy-fallback",
+      "description": "Selectable read-only text when the clipboard is unavailable.",
+      "html": "<div class=\"ds-fallback\"><label for=\"ds-copy-text\">Copy this text into your Bot</label><textarea id=\"ds-copy-text\" readonly spellcheck=\"false\">node /workspace/ebaycli/cli/dist/index.js --profile own-store status --json</textarea></div>",
+      "css": ".ds-fallback{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--ink,#17292c);}.ds-fallback label{display:block;font-size:13px;font-weight:600;margin-bottom:7px;}.ds-fallback textarea{display:block;resize:vertical;min-height:160px;width:100%;padding:12px;border:1px solid #bbc8c0;border-radius:8px;background:#fff;color:var(--ink,#17292c);font-size:12px;line-height:1.6;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;}.ds-fallback textarea:focus-visible{outline:3px solid var(--focus,#215da0);outline-offset:4px;}"
+    },
+    {
+      "name": "Setup Navigation",
+      "kind": "nav",
+      "refersTo": "navigation-item",
+      "description": "Section anchors on the green navigation rail, wrapping on mobile.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Setup navigation\"><a class=\"ds-active\" href=\"#ds-connection\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M3 5h14v10H3zM7 5v10\"/></svg>Connection checks</a><a href=\"#ds-grok\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M7 6 3 10l4 4m6-8 4 4-4 4m-2-10-2 16\"/></svg>Connect Grok Bot</a><a href=\"#ds-scope\"><svg viewBox=\"0 0 20 20\" aria-hidden=\"true\"><path d=\"M3 5h14M3 10h14M3 15h8\"/></svg>What it can manage</a></nav>",
+      "css": ".ds-nav{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;line-height:1.55;display:flex;flex-direction:column;gap:5px;background:var(--nav,#182e31);padding:22px;}.ds-nav a{display:flex;gap:11px;align-items:center;padding:11px 12px;border-radius:8px;text-decoration:none;font-size:14px;color:#c7d8d1;}.ds-nav a:hover{background:#244347;color:#fff;}.ds-nav .ds-active{background:#304c4d;color:#fff;font-weight:650;}.ds-nav a:focus-visible{outline:3px solid var(--focus,#215da0);outline-offset:4px;}.ds-nav svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.6;flex:none;}@media(max-width:760px){.ds-nav{flex-direction:row;flex-wrap:wrap;padding:17px 20px;}.ds-nav a{padding:7px 9px;font-size:12px;}.ds-nav svg{display:none;}}"
+    },
+    {
+      "name": "Connection Status",
+      "kind": "chip",
+      "refersTo": "status-good",
+      "description": "Written state labels with a dot and corresponding semantic color.",
+      "html": "<div class=\"ds-status-list\"><span class=\"ds-status\">Checking</span><span class=\"ds-status\" data-state=\"good\">Online</span><span class=\"ds-status\" data-state=\"error\">Needs setup</span><span class=\"ds-status\" data-state=\"warning\">Open</span></div>",
+      "css": ".ds-status-list{display:flex;flex-wrap:wrap;gap:12px;}.ds-status{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;line-height:1.55;font-size:12px;font-weight:650;display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:20px;background:#edf0ed;color:#52635c;white-space:nowrap;}.ds-status:before{content:\"\";width:6px;height:6px;border-radius:50%;background:currentColor;}.ds-status[data-state=good]{background:#e5f2e9;color:var(--success,#21613f);}.ds-status[data-state=error]{background:#fbe9e9;color:var(--error,#a02d35);}.ds-status[data-state=warning]{background:#fff0d7;color:var(--warning,#80531a);}"
+    },
+    {
+      "name": "Connection Panel",
+      "kind": "card",
+      "refersTo": "check-panel",
+      "description": "A flat bounded panel for service checks and recovery.",
+      "html": "<section class=\"ds-panel\" aria-labelledby=\"ds-panel-heading\"><div class=\"ds-panel-head\"><h2 id=\"ds-panel-heading\">Check your connection</h2><button class=\"ds-panel-retry\" type=\"button\">Check again</button></div><p class=\"ds-panel-summary\">These checks do not verify your store.</p><div class=\"ds-panel-row\"><div><strong>Relay service</strong><small>Can this deployment respond?</small></div><span>Checking</span></div></section>",
+      "css": ".ds-panel{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;line-height:1.55;color:var(--ink,#17292c);background:var(--white,#fff);border:1px solid var(--line,#dce2dd);border-radius:12px;padding:24px 28px;}.ds-panel-head{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:14px;}.ds-panel h2{font-size:20px;letter-spacing:-.02em;margin:0;font-weight:650;line-height:1.25;}.ds-panel-retry{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;font-size:13px;font-weight:650;line-height:1.55;border:1px solid #c4cec7;background:var(--white,#fff);color:var(--ink,#17292c);min-height:42px;padding:9px 15px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;cursor:pointer;transition:background 160ms,border-color 160ms;}.ds-panel-retry:hover{background:#edf2ed;border-color:#a0aea4;}.ds-panel-retry:active{background:#e0e9e1;}.ds-panel-retry:focus-visible{outline:3px solid var(--focus,#215da0);outline-offset:4px;}.ds-panel-summary{color:var(--muted,#536365);font-size:14px;margin:0 0 20px;max-width:72ch;}.ds-panel-row{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:17px 0;border-top:1px solid var(--line,#dce2dd);border-bottom:1px solid var(--line,#dce2dd);font-size:12px;}.ds-panel-row strong{display:block;font-size:14px;font-weight:650;}.ds-panel-row small{display:block;font-size:12px;color:var(--muted,#536365);margin-top:3px;}@media(max-width:760px){.ds-panel{padding:20px 18px;}.ds-panel-head{align-items:flex-start;gap:12px;}.ds-panel h2{font-size:18px;padding-top:6px;}.ds-panel-retry{min-height:36px;padding:7px 10px;font-size:12px;}}@media(prefers-reduced-motion:reduce){.ds-panel-retry{transition:none;}}"
+    },
+    {
+      "name": "Command Block",
+      "kind": "custom",
+      "refersTo": "command-block",
+      "description": "Dark command context with wrapping text and a copy control.",
+      "html": "<div class=\"ds-command\"><div class=\"ds-command-top\"><span>Account readiness · listing read</span><button class=\"ds-command-copy\" type=\"button\" aria-label=\"Copy store check commands\">Copy</button></div><pre><code>node /workspace/ebaycli/cli/dist/index.js --profile own-store status --json\nnode /workspace/ebaycli/cli/dist/index.js --profile own-store listings list --limit 5 --json</code></pre></div>",
+      "css": ".ds-command{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;line-height:1.55;background:#1b3033;color:#edf5ee;border-radius:9px;padding:16px 18px;}.ds-command-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;font-size:11px;color:#b9cec4;}.ds-command-copy{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;font-size:11px;font-weight:600;line-height:1.55;border:1px solid #527069;background:transparent;color:#e5f1e8;border-radius:5px;min-height:30px;padding:4px 9px;cursor:pointer;}.ds-command-copy:hover{background:#2d4948;}.ds-command-copy:focus-visible{outline:3px solid var(--focus,#215da0);outline-offset:4px;}.ds-command pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-size:12px;line-height:1.85;font-family:ui-monospace,SFMono-Regular,Consolas,\"Liberation Mono\",monospace;}.ds-command code{background:none;padding:0;color:inherit;border-radius:0;font-family:inherit;}@media(max-width:760px){.ds-command{padding:13px 14px;}.ds-command pre{font-size:11px;line-height:1.8;}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Relay Workbench",
+    "overview": "A quiet setup workbench uses paper content, dark green navigation, and a rust action to organize practical tasks. Native controls, compact type, and flat bordered surfaces keep configuration and commands easy to scan.\n\nThe recorded system applies to the optional relay's web portal. It was extracted from `backend/src/site.ts` and `backend/src/pages.ts`, checked against the desktop, mobile, and live captures in `.impeccable/review/`. The north-star name and color descriptions are documentation vocabulary for this implementation. No formal FORM seed, QUALITY BAR card, or approved comp was available to establish earlier visual approval.",
+    "keyCharacteristics": [
+      "Paper ground with a dark green navigation area.",
+      "Rust for the main handoff action; restrained native controls elsewhere.",
+      "Flat white status panels and dark command blocks.",
+      "Readable labels, explicit status text, and visible keyboard focus.",
+      "A desktop rail that becomes a wrapping mobile navigation band."
+    ],
+    "rules": [
+      {
+        "name": "The Action Contrast Rule",
+        "body": "The main handoff action uses rust; retry remains a white bordered control. Status colors describe checks rather than actions.",
+        "section": "colors"
+      },
+      {
+        "name": "The Command Context Rule",
+        "body": "Monospace distinguishes executable commands, deployment addresses, and inline technical names. Explanations and controls use the sans-serif stack.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Surface Rule",
+        "body": "Standard surfaces use color and borders for hierarchy; their default, hover, and pressed states do not add shadows or lift.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do preserve the paper ground, green structural surfaces, and rust main action.",
+      "Do pair connection colors with clear state text and a recovery action.",
+      "Do keep commands selectable, wrapping, and visually distinct from explanation.",
+      "Do retain native controls, visible keyboard focus, and reduced-motion behavior."
+    ],
+    "donts": [
+      "Don't use color as the only connection-state indicator.",
+      "Don't add shadows or hover lift to the existing flat controls and panels.",
+      "Don't let long commands force horizontal page overflow."
+    ]
+  }
+}

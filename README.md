@@ -45,6 +45,7 @@ Use a seller-ready sandbox account while learning the workflow. [CLI usage](cli/
 | Draft a listing or update | [Examples](cli/examples/README.md) |
 | Check supported operations | [Support matrix](cli/SUPPORT_MATRIX.md) |
 | Understand OAuth and product boundaries | [Architecture](docs/agent-first-architecture.md) |
+| Understand the portal's purpose and visual system | [Product](PRODUCT.md), [Design](DESIGN.md) |
 | Understand local profiles | [Profiles](docs/profiles.md) |
 | Understand multiple sellers and agent hosting | [Hosting model and public-service gaps](docs/hosting-model.md) |
 | Connect your own store to Grok Bot | [Grok Bot setup](docs/grok-bot.md) |

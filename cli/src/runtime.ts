@@ -19,7 +19,7 @@ import {
 } from "./ebay-engine.js";
 import { AppError } from "./errors.js";
 import { parseDataFile, writeDataFile } from "./listing-files.js";
-import { refreshLocalEbaySession } from "./oauth.js";
+import { reconnectCommands, refreshLocalEbaySession } from "./oauth.js";
 import type {
   CliProfile,
   DoctorReportResponse,
@@ -61,6 +61,13 @@ async function withFreshLocalEbaySession<T>(
   } catch (error) {
     if (error instanceof AppError && error.code === "AUTH_REVOKED") {
       clearLocalEbaySession(profile.name);
+      const nextCommands = reconnectCommands(profile, session);
+      throw new AppError(
+        error.code,
+        `${error.message} Run \`${nextCommands[0]}\` to reconnect.`,
+        { ...(error.details as Record<string, unknown>), nextCommands },
+        error.exitCode
+      );
     }
     throw error;
   }

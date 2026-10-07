@@ -19,6 +19,10 @@ User-visible changes are recorded here. Package versions are defined in `cli/pac
 - Require trusted HTTPS relay transport outside loopback development, reject auth redirects, and safely open Windows consent URLs.
 - Avoid automatic mutation retries and honor bounded read retry delays; rate-limit relay refresh requests.
 - Correct business policy example fields and stale remote-revocation wording.
+- Restrict OAuth by default to permitted immutable seller IDs, including refresh and final token handoff.
+- Add a Cloudflare setup portal with live readiness checks and a Grok Bot handoff.
+- Scan Git history and repository files for leaked secrets in CI.
+- Remove unused OAuth constants and the unused Fulfillment permission from default consent scopes.
 
 ## 0.1.0
 

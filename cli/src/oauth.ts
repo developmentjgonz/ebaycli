@@ -158,7 +158,7 @@ async function postRelayJson<T>(profile: CliProfile, path: string, payload: unkn
   return body as T;
 }
 
-function reconnectCommands(profile: CliProfile, payload: unknown): string[] {
+export function reconnectCommands(profile: CliProfile, payload: unknown): string[] {
   const requested = typeof payload === "object" && payload !== null && "environment" in payload
     ? payload.environment
     : undefined;

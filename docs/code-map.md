@@ -34,6 +34,7 @@ The listing engine remains a central module because Trading/Inventory dispatch a
 | File | Responsibility |
 | --- | --- |
 | [index.ts](../backend/src/index.ts) | HTTP routing, OAuth rate limiting, readiness, and scheduled cleanup |
+| [site.ts](../backend/src/site.ts) | Setup portal styles, live checks, command copying, and Grok Bot handoff |
 | [config.ts](../backend/src/config.ts) | Public-origin validation and database binding |
 | [oauth.ts](../backend/src/oauth.ts) | OAuth state, callback, one-time exchange, and refresh |
 | [ebay.ts](../backend/src/ebay.ts) | Environment credentials, scopes, and eBay token/account calls |
