@@ -20,7 +20,7 @@ jobs:
       GITLEAKS_VERSION: "8.30.1"
       GITLEAKS_LINUX_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -54,7 +54,7 @@ jobs:
       run:
         working-directory: cli
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
@@ -76,7 +76,7 @@ jobs:
     env:
       WRANGLER_SEND_METRICS: "false"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
@@ -92,7 +92,7 @@ jobs:
     env:
       WRANGLER_SEND_METRICS: "false"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -110,7 +110,7 @@ jobs:
     name: Documentation and npm package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 22
