@@ -1,6 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EbayApiClient, resolveEbayEnvironment } from "../src/ebay-api.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("EbayApiClient trading responses", () => {
   it("parses active listings when the XML response includes a declaration", async () => {
@@ -171,5 +176,101 @@ describe("EbayApiClient trading responses", () => {
       warnings: ["Policy warning"]
     }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("EbayApiClient retry safety", () => {
+  const client = () => new EbayApiClient(resolveEbayEnvironment("sandbox"));
+  const writes: Array<[string, (api: EbayApiClient) => Promise<unknown>]> = [
+    ["Inventory offer creation", api => api.createOffer("token", { sku: "SKU-1" })],
+    ["policy creation", api => api.createPaymentPolicy("token", { name: "policy" })],
+    ["Trading listing creation", api => api.addFixedPriceItem("token", "EBAY_US", { Item: { SKU: "SKU-1" } })]
+  ];
+
+  it("retries safe reads after network failures and stops after three attempts", async () => {
+    vi.useFakeTimers();
+    const error = new TypeError("Connection closed");
+    const fetch = vi.fn().mockRejectedValue(error);
+    vi.stubGlobal("fetch", fetch);
+    const result = expect(client().getOffers("token")).rejects.toBe(error);
+
+    await vi.runAllTimersAsync();
+    await result;
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries 503 and 429 read responses before returning the successful result", async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response("temporarily unavailable", { status: 503 }))
+      .mockResolvedValueOnce(new Response("slow down", { status: 429 }))
+      .mockResolvedValueOnce(Response.json({ offers: [] }));
+    vi.stubGlobal("fetch", fetch);
+    const result = expect(client().getOffers("token")).resolves.toEqual({ offers: [] });
+
+    await vi.runAllTimersAsync();
+    await result;
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(["2", "Tue, 06 Oct 2026 12:00:02 GMT"])("honors Retry-After %s for safe reads", async (retryAfter) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-06T12:00:00Z"));
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response("slow down", { status: 429, headers: { "Retry-After": retryAfter } }))
+      .mockResolvedValueOnce(Response.json({ offers: [] }));
+    vi.stubGlobal("fetch", fetch);
+    const result = expect(client().getOffers("token")).resolves.toEqual({ offers: [] });
+
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await result;
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not ignore an upstream Retry-After longer than the bounded retry window", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("slow down", { status: 429, headers: { "Retry-After": "60" } }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(client().getOffers("token")).rejects.toMatchObject({
+      code: "EBAY_API_ERROR", message: expect.stringContaining("retry after the Retry-After interval")
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a known Trading read despite its POST transport", async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Connection closed"))
+      .mockResolvedValueOnce(new Response("<GetMyeBaySellingResponse><Ack>Success</Ack><ActiveList/></GetMyeBaySellingResponse>"));
+    vi.stubGlobal("fetch", fetch);
+    const result = expect(client().getActiveListings("token", "EBAY_US", 1, 5)).resolves.toEqual([]);
+
+    await vi.runAllTimersAsync();
+    await result;
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(writes)("does not repeat %s after an ambiguous network failure", async (_name, write) => {
+    const fetch = vi.fn().mockRejectedValue(new TypeError("Connection closed after submission"));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(write(client())).rejects.toMatchObject({
+      code: "EBAY_API_ERROR", message: expect.stringContaining("may have succeeded")
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(writes)("does not repeat %s after a server error", async (_name, write) => {
+    const fetch = vi.fn().mockResolvedValue(new Response("temporarily unavailable", { status: 503 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(write(client())).rejects.toMatchObject({
+      code: "EBAY_API_ERROR",
+      message: expect.stringContaining("Inspect the seller account or listing state before repeating it"),
+      details: "temporarily unavailable"
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

@@ -3,7 +3,7 @@ import type {
   EbayConnectionResponse,
   ListingSummary,
   MutationPlanResponse
-} from "./backend-types.js";
+} from "./types.js";
 
 function printObject(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);

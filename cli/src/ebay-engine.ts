@@ -1,5 +1,5 @@
 import { AppError } from "./errors.js";
-import { type DoctorReportResponse, type ListingPatchRequest, type ListingSpecRequest, type ListingSummary, type LocalEbaySession, type MutationPlanResponse } from "./backend-types.js";
+import { type DoctorReportResponse, type ListingPatchRequest, type ListingSpecRequest, type ListingSummary, type LocalEbaySession, type MutationPlanResponse } from "./types.js";
 import { EbayApiClient } from "./ebay-api.js";
 
 type JsonObject = Record<string, unknown>;

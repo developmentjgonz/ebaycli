@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible CLI or relay problem.
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - CLI
+        - Cloudflare relay
+        - Documentation or examples
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Include the command and sanitized output. Remove seller tokens, app secrets, and private account details.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: A minimal example or fixture helps. State whether the issue occurs in sandbox or production.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions and operating system
+      description: Include ebay --version, Node version, and OS; include Wrangler version for relay problems.
+    validations:
+      required: true

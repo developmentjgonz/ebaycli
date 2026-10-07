@@ -1,4 +1,6 @@
+# Inventory draft template. Review category, condition, policy IDs, and photos.
 sku: SAMPLE-SKU-001
+writePath: INVENTORY
 marketplaceId: EBAY_US
 title: Vintage brass desk lamp
 description: >
@@ -21,8 +23,9 @@ policies:
   returnPolicyId: "<return-policy-id>"
 locationKey: warehouse-main
 images:
-  - ./images/lamp-front.jpg
-  - ./images/lamp-side.jpg
+  # Add your own photos next to the copied draft before using it.
+  - ./photos/lamp-front.jpg
+  - ./photos/lamp-side.jpg
 aspects:
   Brand:
     - Unbranded

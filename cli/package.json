@@ -2,6 +2,15 @@
   "name": "ebaycli",
   "version": "0.1.0",
   "description": "Local-first eBay seller CLI for listing management",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/developmentjgonz/ebaycli.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/developmentjgonz/ebaycli/blob/main/cli/README.md",
+  "bugs": {
+    "url": "https://github.com/developmentjgonz/ebaycli/issues"
+  },
   "license": "MIT",
   "author": "Joseph Gonzalez <developmentjgonz@gmail.com>",
   "type": "module",
@@ -13,11 +22,14 @@
     "README.md",
     "LICENSE",
     "llms.txt",
-    "SUPPORT_MATRIX.md"
+    "SUPPORT_MATRIX.md",
+    "examples"
   ],
   "scripts": {
-    "clean": "rm -rf dist",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "npm run clean && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "check": "npm run typecheck && npm test && npm run build",
     "dev": "tsx src/index.ts",
     "prepublishOnly": "npm test && npm run build",
     "test": "vitest run",
@@ -40,13 +52,13 @@
   "dependencies": {
     "commander": "^14.0.1",
     "fast-xml-parser": "^5.7.1",
-    "yaml": "^2.8.1",
+    "yaml": "^2.9.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/node": "^24.7.2",
-    "tsx": "^4.20.6",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   }
 }

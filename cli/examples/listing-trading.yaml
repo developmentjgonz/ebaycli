@@ -1,0 +1,34 @@
+# Trading fixed-price draft template. Confirm category and condition with eBay.
+sku: SAMPLE-TRADING-SKU-001
+writePath: TRADING
+marketplaceId: EBAY_US
+title: Vintage brass desk lamp
+description: >
+  Tested vintage brass desk lamp with minor cosmetic wear.
+  Replace this description with the actual item's details and flaws.
+categoryId: "262197"
+# Trading uses numeric condition IDs. "3000" commonly means Used;
+# verify that this category supports it before applying.
+condition: "3000"
+format: FIXED_PRICE
+price:
+  value: "89.99"
+  currency: USD
+availableQuantity: 1
+policies:
+  paymentPolicyId: "<payment-policy-id>"
+  fulfillmentPolicyId: "<fulfillment-policy-id>"
+  returnPolicyId: "<return-policy-id>"
+# Replace these values with the item's shipping origin.
+location: Philadelphia, Pennsylvania
+postalCode: "19106"
+country: US
+dispatchTimeMax: 1
+images:
+  - ./photos/lamp-front.jpg
+  - ./photos/lamp-side.jpg
+aspects:
+  Brand:
+    - Unbranded
+  Type:
+    - Desk Lamp
