@@ -9,14 +9,14 @@ The deployed [setup portal](https://ebaycli-relay.developmentjgonz.workers.dev) 
 Ask the Bot to use a current Node.js 22+ release and install from source into its durable workspace:
 
 ```bash
-git clone --branch codex/public-repo-cleanup https://github.com/developmentjgonz/ebaycli.git /workspace/ebaycli
+git clone --branch main https://github.com/developmentjgonz/ebaycli.git /workspace/ebaycli
 cd /workspace/ebaycli
 npm --prefix cli ci
 npm --prefix cli run build
 node cli/dist/index.js guide --json
 ```
 
-The branch above contains the TypeScript cleanup while it is under review. Use `main` once those changes are merged. The package has not been published to npm.
+The package has not been published to npm. Install the public source checkout above.
 
 Grok's [computer documentation](https://docs.x.ai/grok-bot/computer-and-apps) identifies `/workspace` as durable storage. It also explains that Bots under one user share files, browser sessions, and credentials. A separate Bot or CLI profile does not isolate credentials from your other Bots. Use a dedicated account or another genuine access boundary if you need that separation. Installations outside the durable workspace may need rebuilding after recovery.
 
