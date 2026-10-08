@@ -168,6 +168,8 @@ ebay --profile YOUR_PROFILE config set --backend-url https://your-relay.example.
 ebay --profile YOUR_PROFILE status --json
 ```
 
+Follow the [RuName cutover instructions](../docs/deployment.md#4-register-ebay-endpoints): enabling the replacement disables OAuth on the application's other RuName entries, so preserve the old settings for rollback, synchronize the Worker's RuName secret, and restart pending browser logins.
+
 Changing the relay URL preserves the local seller session and defaults. Add the existing account's immutable `ebayUserId` to the trusted Worker's allowlist before switching. Existing refresh tokens can continue through the Worker when the app keyset and environment match and the account is allowed; if they are rejected, inspect the configuration before reconnecting with `auth login` for that profile and environment. The local profile file path and session contract are unchanged.
 
 No historical auth-state rows need to be copied from the previous database into D1. Start with the Worker migration and restart any browser login that was in progress during the switch. Previous backend listing/setup compatibility endpoints are retired; those operations run through the CLI's local eBay engine.

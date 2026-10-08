@@ -4,7 +4,7 @@ The CLI runs on your machine. The optional reference backend runs directly on Cl
 
 Workers supplies the HTTP runtime and secret bindings; D1 supplies the SQL state. This layout follows Cloudflare's [Workers configuration](https://developers.cloudflare.com/workers/wrangler/configuration/) and [D1 setup](https://developers.cloudflare.com/d1/get-started/) model.
 
-The owner's [reference setup portal](https://ebaycli-relay.developmentjgonz.workers.dev) is deployed. Its OAuth is intentionally inactive pending the app credentials and permitted owner ID; it is not a shared public login service. Forks must create their own database and configure their own origin and secrets.
+The owner's [reference setup portal](https://ebaycli-relay.developmentjgonz.workers.dev) is deployed with production OAuth configured and seller access restricted to the verified owner. A live seller connection on Grok's computer remains unverified; complete consent and the read checks in the [Grok setup guide](grok-bot.md). Forks must create their own database and configure their own origin and secrets.
 
 ## Before you start
 
@@ -124,6 +124,8 @@ In your eBay application's environment-specific redirect settings, configure:
 | Authorization revocation, if enabled | `https://<relay-origin>/notifications/ebay/authorization-revocation` |
 
 Use the corresponding eBay-issued RuName as the Worker secret. eBay's [authorization guide](https://developer.ebay.com/develop/guides/sell/authorization) explains the RuName and environment relationship.
+
+Enabling OAuth on one RuName in eBay's developer portal disables OAuth on the application's other RuName entries. Preserve the previous entry and its URLs for rollback, coordinate the cutover, and update the corresponding `EBAY_PRODUCTION_RUNAME` or `EBAY_SANDBOX_RUNAME` Worker secret to match the enabled entry. Restart browser logins that began before the switch.
 
 If using a custom domain, configure its Worker routing in Cloudflare and verify that it matches `PUBLIC_BASE_URL`. Database creation, secrets, migrations, and deployment are operator actions; local checks do not perform them.
 
