@@ -34,6 +34,10 @@ Take over the Bot's browser for your eBay sign-in, verification, and consent. Do
 
 The CLI prints the consent URL to its error stream while it waits. Its final JSON result redacts the seller tokens. This does not make the stored credentials harmless: anyone able to read the profile file can use the grant. See [profiles](profiles.md) for storage and permissions.
 
+Open the new consent URL promptly: the relay's login state expires after ten minutes. If the callback says the link is invalid, expired, or already used, first check whether the Bot's CLI completed the login. If it did not, stop the waiting command, start a fresh `auth login`, and open that command's new URL in the Bot's browser. Refreshing or reusing an old callback URL cannot restart the login. eBay may remember your earlier consent and complete the retry without another sign-in.
+
+Both `auth login --json` and `status --json` replace access and refresh token values with `***redacted***`; `auth status --json` reports identity and readiness without token fields. If a different build prints full tokens, stop sharing its output and record its commit hash and local changes without copying tokens or profile contents. Use the current source checkout, rebuild it, and check its output before continuing.
+
 ## Verify access with reads first
 
 ```bash
@@ -64,4 +68,4 @@ Keep buyer and account data out of model prompts unless the integration actually
 
 ## Verification boundary
 
-Automated tests exercise real CLI/relay HTTP communication, SQL state, redaction, refresh, and isolated synthetic sellers, with eBay responses simulated. The Cloudflare site can be live while OAuth remains intentionally inactive. A live owner login and the three read checks above must succeed on the Bot's computer before this setup is considered connected. No production listing write is part of that verification.
+Automated tests exercise real CLI/relay HTTP communication, SQL state, redaction, refresh, and isolated synthetic sellers, with eBay responses simulated. The reference deployment's owner has reported successful production consent and status/listing reads on Grok's computer. That manual result does not validate another installation or every store workflow. A live owner login and the three read checks above must succeed on each Bot's computer before that setup is considered connected. No production listing write is part of that verification.

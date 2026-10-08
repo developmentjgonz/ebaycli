@@ -18,6 +18,7 @@ afterEach(() => {
     process.env.XDG_CONFIG_HOME = originalXdgConfigHome;
   }
   process.exitCode = originalExitCode;
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -154,6 +155,75 @@ describe("CLI shape", () => {
       expect(output).not.toContain(session.refreshToken);
       expect(login).toHaveBeenCalledOnce();
       expect(loadProfiles()[0]?.ebaySession).toEqual(session);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    { args: ["status"], refresh: true },
+    { args: ["auth", "status"], refresh: false },
+    { args: ["config", "status"], refresh: false }
+  ])("keeps stored and refreshed tokens out of $args JSON output", async ({ args, refresh }) => {
+    const dir = mkdtempSync(join(tmpdir(), "ebaycli-cli-status-"));
+    process.env.XDG_CONFIG_HOME = dir;
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const session = {
+      environment: "sandbox", marketplaceId: "EBAY_US", accessToken: "status-stored-access-secret",
+      refreshToken: "status-stored-refresh-secret",
+      accessTokenExpiresAtUtc: refresh ? "2000-01-01T00:00:00Z" : "2099-01-01T00:00:00Z"
+    };
+    const renewed = {
+      ...session, accessToken: "status-renewed-access-secret", refreshToken: "status-renewed-refresh-secret",
+      accessTokenExpiresAtUtc: "2099-01-01T00:00:00Z"
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.hostname === "relay.example.test" && url.pathname.endsWith("/refresh")) {
+        expect(init?.method).toBe("POST");
+        expect(JSON.parse(String(init?.body)).refreshToken).toBe(session.refreshToken);
+        return Response.json(renewed);
+      }
+      expect(["api.sandbox.ebay.com", "apiz.sandbox.ebay.com"]).toContain(url.hostname);
+      if (url.pathname === "/ws/api.dll") {
+        expect(new Headers(init?.headers).get("X-EBAY-API-CALL-NAME")).toBe("GetMyeBaySelling");
+        return new Response("<GetMyeBaySellingResponse><Ack>Success</Ack><ActiveList><ItemArray/></ActiveList></GetMyeBaySellingResponse>", {
+          headers: { "Content-Type": "application/xml" }
+        });
+      }
+      expect(init?.method).toBe("GET");
+      expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${refresh ? renewed.accessToken : session.accessToken}`);
+      if (url.pathname.endsWith("/user/")) return Response.json({ userId: "synthetic-owner", username: "synthetic-owner" });
+      if (url.pathname.endsWith("/privilege")) return Response.json({ sellerRegistrationCompleted: true });
+      if (url.pathname.endsWith("/payment_policy")) return Response.json({ paymentPolicies: [{ paymentPolicyId: "payment-a" }] });
+      if (url.pathname.endsWith("/fulfillment_policy")) return Response.json({ fulfillmentPolicies: [{ fulfillmentPolicyId: "fulfillment-a" }] });
+      if (url.pathname.endsWith("/return_policy")) return Response.json({ returnPolicies: [{ returnPolicyId: "return-a" }] });
+      if (url.pathname.endsWith("/location")) return Response.json({ locations: [{ merchantLocationKey: "location-a" }] });
+      throw new Error("Unexpected synthetic provider request.");
+    }));
+    try {
+      upsertProfile({ name: "seller", backendBaseUrl: "https://relay.example.test", ebaySession: session });
+      await runCli(["node", "ebay", "--profile", "seller", ...args, "--json"]);
+      const output = stdout.mock.calls.map(([value]) => String(value)).join("");
+      const parsed = JSON.parse(output);
+      const errors = stderr.mock.calls.map(([value]) => String(value)).join("");
+      for (const token of [session.accessToken, session.refreshToken, renewed.accessToken, renewed.refreshToken]) {
+        expect(output).not.toContain(token);
+        expect(errors).not.toContain(token);
+      }
+      if (args[0] === "status") {
+        expect(parsed.configuration.ebaySession).toMatchObject({ accessToken: "***redacted***", refreshToken: "***redacted***" });
+        expect(parsed.connection.ebayUserId).toBe("synthetic-owner");
+      } else if (args[0] === "auth") {
+        expect(parsed.ebayUserId).toBe("synthetic-owner");
+        expect(parsed).not.toHaveProperty("accessToken");
+        expect(parsed).not.toHaveProperty("refreshToken");
+      } else {
+        expect(parsed.profile.ebaySession).toMatchObject({ accessToken: "***redacted***", refreshToken: "***redacted***" });
+      }
+      expect(loadProfiles()[0]?.ebaySession).toEqual(refresh ? renewed : session);
+      expect(process.exitCode).toBe(originalExitCode);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

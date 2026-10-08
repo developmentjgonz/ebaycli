@@ -74,6 +74,7 @@ export async function authenticateWithEbayLocally(
       callbackUrl: callback.callbackUrl,
       marketplaceId: options.marketplaceId
     });
+    callback.setExpectedState(authorize.state);
     const opened = options.shouldOpen === false ? false : await openBrowser(authorize.authorizeUrl);
     if (!opened) {
       process.stderr.write(`Open this URL in a browser on this machine to connect eBay:\n${authorize.authorizeUrl}\n`);
@@ -205,9 +206,11 @@ export function browserLaunchCommand(url: string, platform = process.platform): 
 
 async function startBrowserCallbackServer(preferredPort: number): Promise<{
   callbackUrl: string;
+  setExpectedState: (state: string) => void;
   waitForResult: (timeoutMs: number) => Promise<{ code?: string; state?: string; error?: string }>;
   close: () => Promise<void>;
 }> {
+  let expectedState: string | undefined;
   let resolveResult: ((value: { code?: string; state?: string; error?: string }) => void) | undefined;
   let rejectResult: ((reason?: unknown) => void) | undefined;
   const resultPromise = new Promise<{ code?: string; state?: string; error?: string }>((resolve, reject) => {
@@ -217,17 +220,36 @@ async function startBrowserCallbackServer(preferredPort: number): Promise<{
 
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
-    const code = url.searchParams.get("code") ?? undefined;
-    const state = url.searchParams.get("state") ?? undefined;
-    const error = url.searchParams.get("error_description") ?? url.searchParams.get("error") ?? undefined;
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("Referrer-Policy", "no-referrer");
+    response.setHeader("Content-Type", "text/plain; charset=utf-8");
+    if (url.pathname !== "/callback") {
+      response.statusCode = 404;
+      response.end("Not found.");
+      return;
+    }
+    if (request.method !== "GET") {
+      response.statusCode = 405;
+      response.setHeader("Allow", "GET");
+      response.end("This callback requires GET.");
+      return;
+    }
+    const code = url.searchParams.get("code") || undefined;
+    const state = url.searchParams.get("state") || undefined;
+    const error = url.searchParams.get("error_description") || url.searchParams.get("error") || undefined;
+    if (!expectedState || state !== expectedState || (!code && !error)) {
+      response.statusCode = 400;
+      response.end("This callback is not valid for the active login. Complete the current eBay sign-in flow or start a new CLI login.");
+      return;
+    }
 
     response.statusCode = error ? 400 : 200;
     response.setHeader("Content-Type", "text/html; charset=utf-8");
     response.end(`
       <html>
         <body style="font-family: sans-serif; padding: 2rem;">
-          <h1>${error ? "Sign-in failed" : "Sign-in complete"}</h1>
-          <p>${escapeHtml(error ?? "You can close this window and return to the CLI.")}</p>
+          <h1>${error ? "Sign-in failed" : "Authorization received"}</h1>
+          <p>${escapeHtml(error ?? "Return to the CLI to confirm the connection. You can close this window.")}</p>
         </body>
       </html>
     `);
@@ -266,6 +288,7 @@ async function startBrowserCallbackServer(preferredPort: number): Promise<{
 
   return {
     callbackUrl: `http://127.0.0.1:${port}/callback`,
+    setExpectedState: (state: string) => { expectedState = state; },
     waitForResult: async (timeoutMs: number) => {
       const timer = setTimeout(() => {
         rejectResult?.(

@@ -17,13 +17,14 @@ function website(env: Env): string {
   }
 }
 
-function page(title: string, body: string, options: { site?: boolean; script?: string } = {}): Response {
+function page(title: string, body: string, options: { site?: boolean; script?: string; status?: number } = {}): Response {
   const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("");
   return new Response(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <style nonce="${nonce}">${options.site ? SITE_STYLES : 'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:52rem;margin:2rem auto;padding:0 1rem;line-height:1.6;color:#1f2937}h1,h2{line-height:1.25}code{background:#f3f4f6;padding:.15rem .35rem;border-radius:.25rem;overflow-wrap:anywhere}a{color:#1d4ed8}'}</style>
 </head><body${options.site ? ' class="site"' : ""}>${body}${options.script ? `<script nonce="${nonce}">${options.script}</script>` : ""}</body></html>`, {
+    status: options.status ?? 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
@@ -99,6 +100,15 @@ export function authLandingPage(env: Env, accepted: boolean): Response {
   return page(title, `<h1>${title}</h1><p>${message}</p>
 <p>Privacy: <a href="/privacy">Privacy policy</a></p>
 <p>${escapeHtml(env.LEGAL_COMPANY_NAME || "ebaycli Relay")}</p>`);
+}
+
+export function authRecoveryPage(): Response {
+  return page("This sign-in link can’t finish", `<main><h1>This sign-in link can’t finish</h1>
+<p>This sign-in attempt is no longer available. It may have expired or already been used. Refreshing this page cannot complete it.</p>
+<ol><li>Return to the CLI or Bot that started this sign-in. Check whether the same CLI profile is already connected before retrying.</li>
+<li>If it is not connected, stop the previous login command and start a fresh <code>ebay auth login</code> using that profile and the intended environment.</li>
+<li>Open the new consent link promptly in a browser on the computer running the CLI. Complete eBay sign-in and consent while the command keeps running. Each link expires after 10 minutes.</li></ol>
+<p><a href="/">Return to setup</a></p></main>`, { status: 400 });
 }
 
 export function llmsText(): Response {

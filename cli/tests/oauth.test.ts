@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { runCli } from "../src/cli.js";
 import { beginLocalEbayAuthorization, browserLaunchCommand, normalizeRelayUrl, refreshLocalEbaySession } from "../src/oauth.js";
-import { upsertProfile } from "../src/profile-config.js";
+import { getProfile, upsertProfile } from "../src/profile-config.js";
 
 const originalXdgConfigHome = process.env.XDG_CONFIG_HOME;
 const originalExitCode = process.exitCode;
@@ -74,11 +74,13 @@ describe("OAuth relay", () => {
     expect(Buffer.from(encodedUrl!, "base64").toString("utf8")).toBe(url);
   });
 
-  it("prints consent instructions before waiting with --no-open and emits one JSON result after a real local callback", async () => {
+  it("ignores nuisance loopback requests and confirms login only after exchanging a state-matched callback", async () => {
     const dir = useIsolatedConfigHome();
     const localFetch = globalThis.fetch;
     const authorizeUrl = "https://auth.sandbox.ebay.com/oauth2/authorize?state=local-state";
     let callbackUrl = "";
+    let finishExchange: (() => void) | undefined;
+    const exchangeReady = new Promise<void>((resolve) => { finishExchange = resolve; });
     let announce: (() => void) | undefined;
     const announced = new Promise<void>((resolve) => { announce = resolve; });
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation((value) => {
@@ -86,9 +88,14 @@ describe("OAuth relay", () => {
       return true;
     });
     const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const relayFetch = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith("/authorize/start")) {
         callbackUrl = JSON.parse(String(init?.body)).callbackUrl as string;
+        const premature = new URL(callbackUrl);
+        premature.search = "state=local-state&code=early-code";
+        const response = await localFetch(premature, { headers: { Connection: "close" } });
+        expect(response.status).toBe(400);
+        await response.text();
         return Response.json({
           authorizeUrl, state: "local-state", environment: "sandbox",
           marketplaceId: "EBAY_US", expiresAtUtc: "2099-01-01T00:00:00.000Z"
@@ -96,13 +103,15 @@ describe("OAuth relay", () => {
       }
       if (url.endsWith("/authorize/exchange")) {
         expect(JSON.parse(String(init?.body))).toEqual({ state: "local-state", code: "local-exchange-code" });
+        await exchangeReady;
         return Response.json({
           environment: "sandbox", marketplaceId: "EBAY_US", accessToken: "local-access-token",
           refreshToken: "local-refresh-token", accessTokenExpiresAtUtc: "2099-01-01T00:00:00.000Z"
         });
       }
       throw new Error(`Unexpected relay request: ${url}`);
-    }));
+    });
+    vi.stubGlobal("fetch", relayFetch);
     upsertProfile({ name: "headless", backendBaseUrl: "https://relay.example.test" });
     const login = runCli([
       "node", "ebay", "--profile", "headless", "auth", "login", "--environment", "sandbox",
@@ -114,12 +123,44 @@ describe("OAuth relay", () => {
       expect(stderr.mock.calls.map(([value]) => String(value)).join("")).toContain("Open this URL in a browser on this machine");
       expect(stdout).not.toHaveBeenCalled();
 
+      const nuisanceRequests = [
+        { path: "/", query: "state=local-state&code=wrong-code", status: 404 },
+        { path: "/favicon.ico", query: "", status: 404 },
+        { path: "/callback/extra", query: "state=local-state&code=wrong-code", status: 404 },
+        { path: "/callback", query: "state=local-state&code=wrong-code", method: "POST", status: 405 },
+        { path: "/callback", query: "state=wrong-state&code=wrong-code", status: 400 },
+        { path: "/callback", query: "code=wrong-code", status: 400 },
+        { path: "/callback", query: "state=local-state", status: 400 },
+        { path: "/callback", query: "state=local-state&code=&error=", status: 400 },
+        { path: "/callback", query: "state=wrong-state&error=access_denied", status: 400 }
+      ];
+      for (const request of nuisanceRequests) {
+        const target = new URL(callbackUrl);
+        target.pathname = request.path;
+        target.search = request.query;
+        const response = await localFetch(target, {
+          method: request.method ?? "GET", headers: { Connection: "close" }
+        });
+        expect(response.status).toBe(request.status);
+        if (request.status === 405) expect(response.headers.get("Allow")).toBe("GET");
+        await response.text();
+        expect(relayFetch).toHaveBeenCalledOnce();
+        expect(stdout).not.toHaveBeenCalled();
+      }
+
       const callback = new URL(callbackUrl);
       callback.searchParams.set("state", "local-state");
       callback.searchParams.set("code", "local-exchange-code");
-      const response = await localFetch(callback);
+      const response = await localFetch(callback, { headers: { Connection: "close" } });
       expect(response.status).toBe(200);
-      await response.text();
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
+      const html = await response.text();
+      expect(html).toContain("Authorization received");
+      expect(html).toContain("Return to the CLI to confirm the connection");
+      expect(html).not.toContain("Sign-in complete");
+      expect(stdout).not.toHaveBeenCalled();
+      finishExchange?.();
       await login;
 
       const output = stdout.mock.calls.map(([value]) => String(value)).join("");
@@ -128,7 +169,52 @@ describe("OAuth relay", () => {
         connection: { environment: "sandbox", accessToken: "***redacted***", refreshToken: "***redacted***" }
       });
       expect(stdout).toHaveBeenCalledOnce();
+      expect(relayFetch).toHaveBeenCalledTimes(2);
       expect(process.exitCode).toBe(originalExitCode);
+    } finally {
+      finishExchange?.();
+      await login;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("terminates a waiting login only for a state-matched provider error, without exchanging or saving a session", async () => {
+    const dir = useIsolatedConfigHome();
+    const localFetch = globalThis.fetch;
+    let callbackUrl = "";
+    let announce: (() => void) | undefined;
+    const announced = new Promise<void>((resolve) => { announce = resolve; });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation((value) => {
+      if (String(value).includes("https://auth.sandbox.ebay.com/")) announce?.();
+      return true;
+    });
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const relayFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      callbackUrl = JSON.parse(String(init?.body)).callbackUrl as string;
+      return Response.json({
+        authorizeUrl: "https://auth.sandbox.ebay.com/oauth2/authorize?state=denied-state", state: "denied-state",
+        environment: "sandbox", marketplaceId: "EBAY_US", expiresAtUtc: "2099-01-01T00:00:00.000Z"
+      });
+    });
+    vi.stubGlobal("fetch", relayFetch);
+    upsertProfile({ name: "denied", backendBaseUrl: "https://relay.example.test" });
+    const login = runCli([
+      "node", "ebay", "--profile", "denied", "auth", "login", "--environment", "sandbox",
+      "--no-open", "--timeout-seconds", "2", "--json"
+    ]);
+    try {
+      await Promise.race([announced, login.then(() => { throw new Error("Login stopped before consent."); })]);
+      const callback = new URL(callbackUrl);
+      callback.search = "state=denied-state&error=access_denied&error_description=Consent%20declined";
+      const response = await localFetch(callback, { headers: { Connection: "close" } });
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain("Sign-in failed");
+      await login;
+      expect(relayFetch).toHaveBeenCalledOnce();
+      expect(stdout).not.toHaveBeenCalled();
+      expect(stderr.mock.calls.map(([value]) => String(value)).join("")).toContain("Consent declined");
+      expect(getProfile("denied")?.ebaySession).toBeUndefined();
+      expect(process.exitCode).toBe(1);
     } finally {
       await login;
       rmSync(dir, { recursive: true, force: true });
