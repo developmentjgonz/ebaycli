@@ -1,6 +1,6 @@
 import { NOTIFICATION_PATHS, acknowledgeNotification, notificationChallenge } from "./notifications";
 import { cleanupExpiredStates, completeAuthorization, exchangeAuthorization, readiness, refreshAuthorization, startAuthorization } from "./oauth";
-import { authLandingPage, homePage, llmsText, privacyPage } from "./pages";
+import { authLandingPage, authRecoveryPage, homePage, llmsText, privacyPage } from "./pages";
 import { json, problem, RelayError } from "./responses";
 import type { Env } from "./types";
 
@@ -62,12 +62,35 @@ function methodNotAllowed(allow: string): Response {
   return response;
 }
 
+function isBrowserCallbackRequest(request: Request): boolean {
+  if (request.method !== "GET") return false;
+  const url = new URL(request.url);
+  return url.pathname === "/oauth/ebay/callback" ||
+    (url.pathname === "/auth/declined" && url.searchParams.has("state"));
+}
+
+function acceptsHtml(request: Request): boolean {
+  return request.headers.get("Accept")?.split(",").some(value => {
+    const [mediaType, ...parameters] = value.split(";");
+    if (mediaType?.trim().toLowerCase() !== "text/html") return false;
+    const quality = parameters.find(parameter => /^\s*q\s*=/i.test(parameter));
+    return quality === undefined || Number(quality.slice(quality.indexOf("=") + 1).trim()) > 0;
+  }) ?? false;
+}
+
 export default {
   async fetch(request: Request, env: Env, _ctx?: ExecutionContext): Promise<Response> {
     try {
       return await route(request, env);
     } catch (error) {
-      if (error instanceof RelayError) return problem(error.status, error.title, error.message);
+      if (error instanceof RelayError) {
+        if (error.status === 400 && error.title === "local_ebay_authorize_exchange_failed" && isBrowserCallbackRequest(request)) {
+          const response = acceptsHtml(request) ? authRecoveryPage() : problem(error.status, error.title, error.message);
+          response.headers.set("Vary", "Accept");
+          return response;
+        }
+        return problem(error.status, error.title, error.message);
+      }
       // Do not serialize database errors, upstream bodies, request values, or tokens.
       return problem(500, "relay_error", "The relay could not complete the request. Verify the deployment configuration and try again.");
     }

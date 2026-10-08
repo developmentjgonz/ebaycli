@@ -45,7 +45,7 @@ The CLI uses three JSON endpoints:
 | `POST /api/local/ebay/authorize/exchange` | Consume a one-time handoff and return a seller session |
 | `POST /api/local/ebay/refresh` | Refresh a seller token while preserving local workflow defaults |
 
-The browser callback is `GET /oauth/ebay/callback`. The registered declined endpoint, `GET /auth/declined`, also completes a pending login with an error when eBay supplies its state. Errors use HTTP status codes and a JSON problem object with `title`, `detail`, and `status`; revoked grants return HTTP 401 so the CLI can clear its local session and request reconnection.
+The browser callback is `GET /oauth/ebay/callback`. The registered declined endpoint, `GET /auth/declined`, also completes a pending login with an error when eBay supplies its state. API errors use HTTP status codes and a JSON problem object with `title`, `detail`, and `status`; revoked grants return HTTP 401 so the CLI can clear its local session and request reconnection. A browser requesting HTML receives a recovery page for invalid, expired, or already-used callback links, with the same HTTP 400 status and no echoed OAuth parameters.
 
 The relay exposes public health, readiness, privacy, auth landing, agent metadata, and eBay notification endpoints. See the [backend README](../backend/README.md) for the full route list.
 

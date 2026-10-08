@@ -23,6 +23,7 @@ User-visible changes are recorded here. Package versions are defined in `cli/pac
 - Add a Cloudflare setup portal with live readiness checks and a Grok Bot handoff.
 - Scan Git history and repository files for leaked secrets in CI.
 - Remove unused OAuth constants and the unused Fulfillment permission from default consent scopes.
+- Ignore unrelated loopback browser requests during login and show safe recovery instructions for expired or already-used relay callbacks.
 
 ## 0.1.0
 

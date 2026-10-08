@@ -4,7 +4,7 @@ The CLI runs on your machine. The optional reference backend runs directly on Cl
 
 Workers supplies the HTTP runtime and secret bindings; D1 supplies the SQL state. This layout follows Cloudflare's [Workers configuration](https://developers.cloudflare.com/workers/wrangler/configuration/) and [D1 setup](https://developers.cloudflare.com/d1/get-started/) model.
 
-The owner's [reference setup portal](https://ebaycli-relay.developmentjgonz.workers.dev) is deployed with production OAuth configured and seller access restricted to the verified owner. A live seller connection on Grok's computer remains unverified; complete consent and the read checks in the [Grok setup guide](grok-bot.md). Forks must create their own database and configure their own origin and secrets.
+The owner's [reference setup portal](https://ebaycli-relay.developmentjgonz.workers.dev) is deployed with production OAuth configured and seller access restricted to the verified owner. The owner has reported successful production consent, status checks, and listing reads on Grok's computer. Each new installation must complete its own consent and read checks in the [Grok setup guide](grok-bot.md). Forks must create their own database and configure their own origin and secrets.
 
 ## Before you start
 

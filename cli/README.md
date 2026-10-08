@@ -190,7 +190,7 @@ ebay auth disconnect --json
 | --- | --- |
 | No relay URL is configured | Run `config set --backend-url YOUR_RELAY_URL` for the same profile. |
 | No seller session is connected | Run `auth login` for the intended profile and environment. |
-| Consent fails or login times out | Check relay credentials and its registered HTTPS callback, ensure local port `8765` is free, then retry. See the [deployment guide](https://github.com/developmentjgonz/ebaycli/blob/main/docs/deployment.md). |
+| Consent fails or login times out | Check the relay's registered HTTPS callback and complete consent on the CLI's computer. If the callback link expired or was already used, check whether login completed; otherwise stop the old command and start a fresh login with its new consent URL. See the [deployment guide](https://github.com/developmentjgonz/ebaycli/blob/main/docs/deployment.md). |
 | Reads work but create fails | Run `setup doctor --json`; check seller registration, policy IDs, location, and category requirements. Sandbox accounts may connect without being seller-ready. |
 | A local image cannot be read | Resolve its path relative to the draft file and confirm the image exists. |
 | Trading verification returns `verified: false` | Inspect the returned error or reason; confirm `writePath: TRADING` and a condition accepted by the category. |
