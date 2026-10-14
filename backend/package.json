@@ -21,7 +21,7 @@
     "sharp": "0.35.5"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261007.1",
+    "@cloudflare/workers-types": "^5.20261011.1",
     "@types/node": "^24.7.2",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11",
